@@ -142,29 +142,29 @@ export default function ListProjectsCommand() {
     return true;
   }
 
-  async function handleAppendFeature(projectId: string, featureText: string): Promise<boolean> {
+  async function handleAppendFeature(projectId: string, featureText: string): Promise<Idea | null> {
     const trimmed = featureText.trim();
     if (!trimmed) {
       await showToast(Toast.Style.Failure, "Feature text cannot be empty");
-      return false;
+      return null;
     }
 
     const existing = storedProjects ?? [];
     const project = existing.find((item) => item.id === projectId);
     if (!project) {
       await showToast(Toast.Style.Failure, "Project not found");
-      return false;
+      return null;
     }
 
     if (project.isArchived) {
       await showToast(Toast.Style.Failure, "Project is archived");
-      return false;
+      return null;
     }
 
     const now = new Date().toISOString();
     const newFeatures = createFeaturesFromText(trimmed, { timestamp: now });
     if (newFeatures.length === 0) {
-      return false;
+      return null;
     }
 
     const updatedProjects = existing.map((item) => {
@@ -181,7 +181,8 @@ export default function ListProjectsCommand() {
 
     await setProjects(updatedProjects);
     await showToast(Toast.Style.Success, "Feature appended");
-    return true;
+    const updatedProject = updatedProjects.find((item) => item.id === projectId);
+    return updatedProject ? normalizeProject(updatedProject) : null;
   }
 
   async function handleTogglePin(projectId: string, pin: boolean) {
@@ -339,10 +340,12 @@ export default function ListProjectsCommand() {
   );
 }
 
+type AppendFeatureHandler = (projectId: string, feature: string) => Promise<Idea | null>;
+
 type ProjectListItemProps = {
   project: Idea;
   allProjects: Idea[];
-  onAppendFeature: (projectId: string, feature: string) => Promise<boolean>;
+  onAppendFeature: AppendFeatureHandler;
   onDelete: (projectId: string) => Promise<void>;
   onCreateProject: (values: ProjectFormValues) => Promise<boolean>;
   onUpdateProject: (projectId: string, values: ProjectFormValues) => Promise<boolean>;
@@ -395,7 +398,7 @@ function ProjectListItem({
 type ProjectActionsProps = {
   project: Idea;
   allProjects: Idea[];
-  onAppendFeature: (projectId: string, feature: string) => Promise<boolean>;
+  onAppendFeature: AppendFeatureHandler;
   onDelete: (projectId: string) => Promise<void>;
   onCreateProject: (values: ProjectFormValues) => Promise<boolean>;
   onUpdateProject: (projectId: string, values: ProjectFormValues) => Promise<boolean>;
@@ -528,16 +531,24 @@ function ProjectActions({
 function InlineAppendFeatureForm(props: {
   projectId: string;
   projectTitle: string;
-  onSubmit: (projectId: string, feature: string) => Promise<boolean>;
+  onSubmit: AppendFeatureHandler;
+  onSuccess?: (project: Idea) => void;
 }) {
-  const { projectId, projectTitle, onSubmit } = props;
+  const { projectId, projectTitle, onSubmit, onSuccess } = props;
 
   return (
     <AppendFeatureForm
       navigationTitle={`Append Feature • ${projectTitle}`}
       projectId={projectId}
       closeOnSuccess
-      onSubmit={(values) => onSubmit(values.projectId, values.feature)}
+      onSubmit={async (values) => {
+        const result = await onSubmit(values.projectId, values.feature);
+        if (result) {
+          onSuccess?.(result);
+          return true;
+        }
+        return false;
+      }}
     />
   );
 }
@@ -545,7 +556,7 @@ function InlineAppendFeatureForm(props: {
 function ProjectDetail(props: {
   project: Idea;
   allProjects: Idea[];
-  onAppendFeature: (projectId: string, feature: string) => Promise<boolean>;
+  onAppendFeature: AppendFeatureHandler;
   onDelete: (projectId: string) => Promise<void>;
   onCreateProject: (values: ProjectFormValues) => Promise<boolean>;
   onUpdateProject: (projectId: string, values: ProjectFormValues) => Promise<boolean>;
@@ -578,6 +589,7 @@ function ProjectDetail(props: {
                 projectId={displayProject.id}
                 projectTitle={displayProject.title}
                 onSubmit={onAppendFeature}
+                onSuccess={setDisplayProject}
               />
             }
           />
@@ -786,11 +798,7 @@ export function AppendFeatureForm({
       navigationTitle={navigationTitle}
       actions={
         <ActionPanel>
-          <Action.SubmitForm
-            title="Add Feature"
-            shortcut={{ modifiers: ["cmd"], key: "enter" }}
-            onSubmit={handleSubmit}
-          />
+          <Action.SubmitForm title="Add Feature" onSubmit={handleSubmit} />
           {!projectId && availableProjects.length > 0 && (
             <Action
               title="Focus Project Picker"
