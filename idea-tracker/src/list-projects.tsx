@@ -294,13 +294,7 @@ export default function ListProjectsCommand() {
 
           <List.Section title="Projects" subtitle={`${filteredProjects.active.length}`}>
             {filteredProjects.active.length === 0 ? (
-              <List.Item
-                title="No active projects"
-                icon={Icon.Tray}
-                accessories={
-                  selectedTag === "__all" ? undefined : [{ tag: { value: selectedTag, color: tagColor(selectedTag) } }]
-                }
-              />
+              <List.Item title="No active projects" icon={Icon.Tray} />
             ) : (
               filteredProjects.active.map((project) => (
                 <ProjectListItem
