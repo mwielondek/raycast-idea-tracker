@@ -17,7 +17,7 @@ Capture project ideas, append feature bullets in seconds, and export the latest 
 1. Clone the repository:
    ```bash
    git clone https://github.com/mwielondek/raycast-idea-tracker.git
-   cd raycast-idea-tracker
+   cd raycast-idea-tracker/idea-tracker
    ```
 2. Install dependencies:
    ```bash
@@ -26,7 +26,7 @@ Capture project ideas, append feature bullets in seconds, and export the latest 
 
 ## Load the Extension into Raycast
 1. Open Raycast and run `Extensions` → `Import Extension`.
-2. Choose the `raycast-idea-tracker` folder you cloned.
+2. Choose the `idea-tracker` folder inside the cloned repository.
 3. Raycast will add the extension. Launch it via `Idea Tracker` or the command palette entry **Open Idea Tracker**.
 
 Changes you make to the source files are reflected immediately when you re-run the command.
