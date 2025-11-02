@@ -7,17 +7,15 @@ import {
   Detail,
   Form,
   Icon,
-  LaunchType,
   List,
   Toast,
   confirmAlert,
-  launchCommand,
   showHUD,
   showToast,
   useNavigation,
 } from "@raycast/api";
 import { useLocalStorage, useForm } from "@raycast/utils";
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
 import {
   IDEAS_STORAGE_KEY,
   Idea,
@@ -29,7 +27,7 @@ import {
   parseTagsInput,
 } from "./ideas";
 
-const TAG_COLORS = [Color.Blue, Color.Red, Color.Green, Color.Orange, Color.Purple, Color.Magenta, Color.Yellow, Color.PrimaryText];
+const TAG_COLORS = ["#A5B4FC", "#C4B5FD", "#FDBA8C", "#FBCFE8", "#BFDBFE", "#FDE68A", "#F5D0FE", "#C7D2FE"] as const;
 
 export type ProjectFormValues = {
   title: string;
@@ -275,7 +273,7 @@ export default function ListProjectsCommand() {
       ) : (
         <>
           {filteredProjects.pinned.length > 0 && (
-            <List.Section title="Pinned Projects">
+            <List.Section title="★ Pinned Projects" subtitle={`${filteredProjects.pinned.length}`}>
               {filteredProjects.pinned.map((project) => (
                 <ProjectListItem
                   key={project.id}
@@ -292,7 +290,7 @@ export default function ListProjectsCommand() {
             </List.Section>
           )}
 
-          <List.Section title="Projects">
+          <List.Section title="Projects" subtitle={`${filteredProjects.active.length}`}>
             {filteredProjects.active.length === 0 ? (
               <List.Item
                 title="No active projects"
@@ -319,7 +317,7 @@ export default function ListProjectsCommand() {
           </List.Section>
 
           {filteredProjects.archived.length > 0 && (
-            <List.Section title="Archived Projects">
+            <List.Section title="📁 Archived Projects" subtitle={`${filteredProjects.archived.length}`}>
               {filteredProjects.archived.map((project) => (
                 <ProjectListItem
                   key={project.id}
@@ -377,6 +375,7 @@ function ProjectListItem({
       subtitle={project.summary}
       keywords={[project.summary ?? "", ...project.tags]}
       accessories={accessories}
+      icon={project.isPinned ? Icon.Star : project.isArchived ? Icon.Folder : Icon.Document}
       actions={
         <ProjectActions
           project={project}
@@ -420,7 +419,18 @@ function ProjectActions({
         <Action.Push
           title="Open Project"
           icon={Icon.TextDocument}
-          target={<ProjectDetail project={project} />}
+          target={
+            <ProjectDetail
+              project={project}
+              allProjects={allProjects}
+              onAppendFeature={onAppendFeature}
+              onDelete={onDelete}
+              onCreateProject={onCreateProject}
+              onUpdateProject={onUpdateProject}
+              onTogglePin={onTogglePin}
+              onToggleArchive={onToggleArchive}
+            />
+          }
         />
         <Action.Push
           title="Append Feature"
@@ -443,14 +453,14 @@ function ProjectActions({
         {project.isPinned ? (
           <Action
             title="Unpin Project"
-            icon={Icon.Pin}
+            icon={Icon.Star}
             shortcut={{ modifiers: ["cmd"], key: "p" }}
             onAction={() => onTogglePin(project.id, false)}
           />
         ) : (
           <Action
             title="Pin Project"
-            icon={Icon.Pin}
+            icon={Icon.Star}
             shortcut={{ modifiers: ["cmd"], key: "p" }}
             onAction={() => onTogglePin(project.id, true)}
           />
@@ -458,14 +468,14 @@ function ProjectActions({
         {project.isArchived ? (
           <Action
             title="Restore Project"
-            icon={Icon.RotateAntiClockwise}
+            icon={Icon.Folder}
             shortcut={{ modifiers: ["cmd", "shift"], key: "a" }}
             onAction={() => onToggleArchive(project.id, false)}
           />
         ) : (
           <Action
             title="Archive Project"
-            icon={Icon.Tray}
+            icon={Icon.Folder}
             shortcut={{ modifiers: ["cmd", "shift"], key: "a" }}
             onAction={() => onToggleArchive(project.id, true)}
           />
@@ -500,16 +510,6 @@ function ProjectActions({
           shortcut={{ modifiers: ["cmd"], key: "n" }}
           target={<AddProjectForm onSubmit={onCreateProject} />}
         />
-        <Action
-          title="Open Add Project Command"
-          icon={Icon.AppWindowList}
-          onAction={() => launchCommand({ name: "add-project", type: LaunchType.UserInitiated })}
-        />
-        <Action
-          title="Open Append Feature Command"
-          icon={Icon.Bolt}
-          onAction={() => launchCommand({ name: "append-feature", type: LaunchType.UserInitiated })}
-        />
       </ActionPanel.Section>
 
       <ActionPanel.Section title="Manage">
@@ -542,13 +542,71 @@ function InlineAppendFeatureForm(props: {
   );
 }
 
-function ProjectDetail({ project }: { project: Idea }) {
+function ProjectDetail(props: {
+  project: Idea;
+  allProjects: Idea[];
+  onAppendFeature: (projectId: string, feature: string) => Promise<boolean>;
+  onDelete: (projectId: string) => Promise<void>;
+  onCreateProject: (values: ProjectFormValues) => Promise<boolean>;
+  onUpdateProject: (projectId: string, values: ProjectFormValues) => Promise<boolean>;
+  onTogglePin: (projectId: string, pin: boolean) => Promise<void>;
+  onToggleArchive: (projectId: string, archive: boolean) => Promise<void>;
+}) {
+  const { project, allProjects, onAppendFeature, onDelete, onCreateProject, onUpdateProject, onTogglePin, onToggleArchive } = props;
+
   return (
     <Detail
       navigationTitle={project.title}
       markdown={formatIdeaMarkdown(project)}
       actions={
         <ActionPanel>
+          <Action.Push
+            title="Append Feature"
+            icon={Icon.PlusCircle}
+            target={
+              <InlineAppendFeatureForm
+                projectId={project.id}
+                projectTitle={project.title}
+                onSubmit={onAppendFeature}
+              />
+            }
+          />
+          <Action.Push
+            title="Edit Project"
+            icon={Icon.Pencil}
+            shortcut={{ modifiers: ["cmd"], key: "e" }}
+            target={<EditProjectForm project={project} onSubmit={(values) => onUpdateProject(project.id, values)} />}
+          />
+          {project.isPinned ? (
+            <Action
+              title="Unpin Project"
+              icon={Icon.Star}
+              shortcut={{ modifiers: ["cmd"], key: "p" }}
+              onAction={() => onTogglePin(project.id, false)}
+            />
+          ) : (
+            <Action
+              title="Pin Project"
+              icon={Icon.Star}
+              shortcut={{ modifiers: ["cmd"], key: "p" }}
+              onAction={() => onTogglePin(project.id, true)}
+            />
+          )}
+          {project.isArchived ? (
+            <Action
+              title="Restore Project"
+              icon={Icon.Folder}
+              shortcut={{ modifiers: ["cmd", "shift"], key: "a" }}
+              onAction={() => onToggleArchive(project.id, false)}
+            />
+          ) : (
+            <Action
+              title="Archive Project"
+              icon={Icon.Folder}
+              shortcut={{ modifiers: ["cmd", "shift"], key: "a" }}
+              onAction={() => onToggleArchive(project.id, true)}
+            />
+          )}
           <Action
             title="Copy Project as Markdown"
             icon={Icon.Clipboard}
@@ -556,6 +614,13 @@ function ProjectDetail({ project }: { project: Idea }) {
               await Clipboard.copy(formatIdeaMarkdown(project));
               await showHUD("Copied project");
             }}
+          />
+          <Action
+            title="Delete Project"
+            icon={Icon.Trash}
+            style={Action.Style.Destructive}
+            shortcut={{ modifiers: ["ctrl"], key: "x" }}
+            onAction={() => onDelete(project.id)}
           />
         </ActionPanel>
       }
@@ -671,7 +736,7 @@ export function AppendFeatureForm({
 }: AppendFeatureFormProps) {
   const { pop } = useNavigation();
   const availableProjects = (projects ?? []).map(normalizeProject);
-  const initialProjectId = projectId ?? availableProjects[0]?.id ?? "";
+  const initialProjectId = projectId ?? "";
 
   const form = useForm<AppendFeatureValues>({
     initialValues: {
@@ -692,6 +757,14 @@ export function AppendFeatureForm({
     },
   });
 
+  const { itemProps, handleSubmit, focus, setValue } = form;
+
+  useEffect(() => {
+    if (!projectId && availableProjects.length > 0) {
+      focus("projectId");
+    }
+  }, [projectId, availableProjects.length, focus]);
+
   return (
     <Form
       navigationTitle={navigationTitle}
@@ -700,27 +773,39 @@ export function AppendFeatureForm({
           <Action.SubmitForm
             title="Add Feature"
             shortcut={{ modifiers: ["cmd"], key: "enter" }}
-            onSubmit={form.handleSubmit}
+            onSubmit={handleSubmit}
           />
           {!projectId && availableProjects.length > 0 && (
             <Action
               title="Focus Project Picker"
               icon={Icon.CommandSymbol}
               shortcut={{ modifiers: ["cmd"], key: "p" }}
-              onAction={() => form.focus("projectId")}
+              onAction={() => focus("projectId")}
             />
           )}
         </ActionPanel>
       }
     >
       {!projectId && availableProjects.length > 0 && (
-        <Form.Dropdown title="Project" {...form.itemProps.projectId} storeValue>
+        <Form.Dropdown
+          title="Project"
+          {...itemProps.projectId}
+          storeValue
+          autoFocus
+          onChange={(value) => {
+            setValue("projectId", value);
+            if (value) {
+              focus("feature");
+            }
+          }}
+        >
+          <Form.Dropdown.Item value="" title="Select a project" icon={Icon.Circle} />
           {availableProjects.map((project) => (
             <Form.Dropdown.Item
               key={project.id}
               value={project.id}
               title={project.title}
-              icon={project.isPinned ? Icon.Pin : project.isArchived ? Icon.Tray : Icon.Circle}
+              icon={project.isPinned ? Icon.Star : project.isArchived ? Icon.Folder : Icon.Circle}
             />
           ))}
         </Form.Dropdown>
@@ -728,7 +813,7 @@ export function AppendFeatureForm({
       <Form.TextArea
         title="Feature Idea"
         placeholder="Outline the feature or enhancement to append"
-        {...form.itemProps.feature}
+        {...itemProps.feature}
         autoFocus
       />
     </Form>
@@ -745,7 +830,7 @@ function normalizeProject(project: StoredProject): Idea {
   };
 }
 
-function tagColor(tag: string): Color {
+function tagColor(tag: string): Color | string {
   const index = Math.abs(hashCode(tag)) % TAG_COLORS.length;
   return TAG_COLORS[index];
 }
