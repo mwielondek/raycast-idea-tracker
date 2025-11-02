@@ -851,7 +851,6 @@ export function AppendFeatureForm({
             }
           }}
         >
-          <Form.Dropdown.Item value="" title="Select a project" icon={Icon.Circle} />
           {availableProjects.map((project) => (
             <Form.Dropdown.Item
               key={project.id}
