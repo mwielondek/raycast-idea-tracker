@@ -15,7 +15,7 @@ import {
   useNavigation,
 } from "@raycast/api";
 import { useLocalStorage, useForm } from "@raycast/utils";
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   IDEAS_STORAGE_KEY,
   Idea,
@@ -558,11 +558,16 @@ function ProjectDetail(props: {
     const normalized = (storedProjects ?? []).map(normalizeProject);
     return normalized.find((item) => item.id === project.id) ?? project;
   }, [storedProjects, project]);
+  const [displayProject, setDisplayProject] = useState<Idea>(latestProject);
+
+  useEffect(() => {
+    setDisplayProject(latestProject);
+  }, [latestProject]);
 
   return (
     <Detail
-      navigationTitle={latestProject.title}
-      markdown={formatIdeaMarkdown(latestProject)}
+      navigationTitle={displayProject.title}
+      markdown={formatIdeaMarkdown(displayProject)}
       actions={
         <ActionPanel>
           <Action.Push
@@ -570,8 +575,8 @@ function ProjectDetail(props: {
             icon={Icon.PlusCircle}
             target={
               <InlineAppendFeatureForm
-                projectId={latestProject.id}
-                projectTitle={latestProject.title}
+                projectId={displayProject.id}
+                projectTitle={displayProject.title}
                 onSubmit={onAppendFeature}
               />
             }
@@ -580,43 +585,43 @@ function ProjectDetail(props: {
             title="Edit Project"
             icon={Icon.Pencil}
             shortcut={{ modifiers: ["cmd"], key: "e" }}
-            target={<EditProjectForm project={latestProject} onSubmit={(values) => onUpdateProject(latestProject.id, values)} />}
+            target={<EditProjectForm project={displayProject} onSubmit={(values) => onUpdateProject(displayProject.id, values)} />}
           />
-          {latestProject.isPinned ? (
+          {displayProject.isPinned ? (
             <Action
               title="Unpin Project"
               icon={Icon.Star}
               shortcut={{ modifiers: ["cmd", "opt"], key: "p" }}
-              onAction={() => onTogglePin(latestProject.id, false)}
+              onAction={() => onTogglePin(displayProject.id, false)}
             />
           ) : (
             <Action
               title="Pin Project"
               icon={Icon.Star}
               shortcut={{ modifiers: ["cmd", "opt"], key: "p" }}
-              onAction={() => onTogglePin(latestProject.id, true)}
+              onAction={() => onTogglePin(displayProject.id, true)}
             />
           )}
-          {latestProject.isArchived ? (
+          {displayProject.isArchived ? (
             <Action
               title="Restore Project"
               icon={Icon.Folder}
               shortcut={{ modifiers: ["cmd", "shift"], key: "a" }}
-              onAction={() => onToggleArchive(latestProject.id, false)}
+              onAction={() => onToggleArchive(displayProject.id, false)}
             />
           ) : (
             <Action
               title="Archive Project"
               icon={Icon.Folder}
               shortcut={{ modifiers: ["cmd", "shift"], key: "a" }}
-              onAction={() => onToggleArchive(latestProject.id, true)}
+              onAction={() => onToggleArchive(displayProject.id, true)}
             />
           )}
           <Action
             title="Copy Project as Markdown"
             icon={Icon.Clipboard}
             onAction={async () => {
-              await Clipboard.copy(formatIdeaMarkdown(latestProject));
+              await Clipboard.copy(formatIdeaMarkdown(displayProject));
               await showHUD("Copied project");
             }}
           />
@@ -625,7 +630,7 @@ function ProjectDetail(props: {
             icon={Icon.Trash}
             style={Action.Style.Destructive}
             shortcut={{ modifiers: ["ctrl"], key: "x" }}
-            onAction={() => onDelete(latestProject.id)}
+            onAction={() => onDelete(displayProject.id)}
           />
         </ActionPanel>
       }
