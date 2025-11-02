@@ -15,10 +15,24 @@
   "license": "MIT",
   "commands": [
     {
-      "name": "open-idea-tracker",
-      "title": "Open Idea Tracker",
-      "subtitle": "Ideas",
-      "description": "Browse, edit, and export your ideas.",
+      "name": "list-projects",
+      "title": "List Projects",
+      "subtitle": "Projects",
+      "description": "Review projects, append features, and export Markdown.",
+      "mode": "view"
+    },
+    {
+      "name": "add-project",
+      "title": "Add Project",
+      "subtitle": "Projects",
+      "description": "Capture a new project with tags and starter features.",
+      "mode": "view"
+    },
+    {
+      "name": "append-feature",
+      "title": "Append Feature",
+      "subtitle": "Projects",
+      "description": "Append a feature bullet to an existing project.",
       "mode": "view"
     }
   ],

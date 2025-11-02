@@ -4,6 +4,7 @@ import {
   createFeaturesFromText,
   formatIdeaMarkdown,
   formatIdeasMarkdown,
+  parseTagsInput,
 } from "./ideas";
 
 describe("createFeaturesFromText", () => {
@@ -39,6 +40,7 @@ describe("formatIdeaMarkdown", () => {
       id: "idea-1",
       title: "Launch Companion App",
       summary: "Mobile app to support core desktop product.",
+      tags: ["mobile", "retention"],
       features: [
         { id: "feature-1", content: "Realtime sync", createdAt: "2025-01-01T00:00:00.000Z" },
         { id: "feature-2", content: "Push notifications", createdAt: "2025-01-01T00:00:00.000Z" },
@@ -54,6 +56,8 @@ describe("formatIdeaMarkdown", () => {
         "# Launch Companion App",
         "",
         "Mobile app to support core desktop product.",
+        "",
+        "**Tags:** mobile, retention",
         "",
         "- Created: formatted-2025-01-01T00:00:00.000Z",
         "- Updated: formatted-2025-01-02T12:00:00.000Z",
@@ -71,6 +75,7 @@ describe("formatIdeaMarkdown", () => {
       id: "idea-2",
       title: "Empty Idea",
       summary: undefined,
+      tags: [],
       features: [],
       createdAt: "2025-01-01T00:00:00.000Z",
       updatedAt: "2025-01-01T00:00:00.000Z",
@@ -95,6 +100,7 @@ describe("formatIdeasMarkdown", () => {
       id: "idea-1",
       title: "Idea One",
       summary: undefined,
+      tags: ["ops"],
       features: [],
       createdAt: "2025-01-01T00:00:00.000Z",
       updatedAt: "2025-01-01T00:00:00.000Z",
@@ -103,6 +109,7 @@ describe("formatIdeasMarkdown", () => {
       id: "idea-2",
       title: "Idea Two",
       summary: undefined,
+      tags: [],
       features: [],
       createdAt: "2025-01-02T00:00:00.000Z",
       updatedAt: "2025-01-02T00:00:00.000Z",
@@ -115,6 +122,8 @@ describe("formatIdeasMarkdown", () => {
     expect(result).toBe(
       [
         "# Idea One",
+        "",
+        "**Tags:** ops",
         "",
         "- Created: 2025-01-01T00:00:00.000Z",
         "- Updated: 2025-01-01T00:00:00.000Z",
@@ -135,5 +144,16 @@ describe("formatIdeasMarkdown", () => {
 
   it("returns placeholder when no ideas exist", () => {
     expect(formatIdeasMarkdown([], { formatDate: (iso) => iso })).toBe("_No ideas captured yet._");
+  });
+});
+
+describe("parseTagsInput", () => {
+  it("returns empty array for undefined or empty input", () => {
+    expect(parseTagsInput()).toEqual([]);
+    expect(parseTagsInput("   ")).toEqual([]);
+  });
+
+  it("splits and trims comma separated tags", () => {
+    expect(parseTagsInput("growth,  mobile ,  B2B")).toEqual(["growth", "mobile", "B2B"]);
   });
 });

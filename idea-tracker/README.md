@@ -3,11 +3,16 @@
 Capture project ideas, append feature bullets in seconds, and export the latest thinking as Markdown without leaving Raycast.
 
 ## Features
-- Fast list of all ideas sorted by last update.
-- Add ideas with optional context and seed feature bullets (one per line).
-- Append new feature bullets via a single-field form (`⌘⇧F`).
-- View the complete idea rendered as Markdown and copy the current idea or all ideas at once.
-- Data persists locally using Raycast's encrypted storage.
+- Two-pane list with live detail preview and Markdown rendering.
+- Filter projects by tags using the search bar dropdown.
+- Add projects with context, comma-separated tags, and starter feature bullets.
+- Append feature bullets with the default Enter shortcut or open a full detail view.
+- Export the selected project or all projects as Markdown; data stays local in Raycast storage.
+
+## Commands
+- **List Projects** – Main view to browse, filter, and append features quickly.
+- **Add Project** – Capture a new project with tags and initial feature notes.
+- **Append Feature** – Pick a project and append a feature bullet from anywhere in Raycast.
 
 ## Requirements
 - Raycast 1.81 or newer with Developer Tools.

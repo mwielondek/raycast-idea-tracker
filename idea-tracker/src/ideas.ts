@@ -10,10 +10,13 @@ export type Idea = {
   id: string;
   title: string;
   summary?: string;
+  tags: string[];
   features: IdeaFeature[];
   createdAt: string;
   updatedAt: string;
 };
+
+export const IDEAS_STORAGE_KEY = "raycast-idea-tracker/ideas";
 
 type FeatureOptions = {
   timestamp?: string;
@@ -22,6 +25,16 @@ type FeatureOptions = {
 
 type FormatOptions = {
   formatDate?: (iso: string) => string;
+};
+
+type CreateIdeaParams = {
+  title: string;
+  summary?: string;
+  tags?: string[];
+  features?: IdeaFeature[];
+  createdAt?: string;
+  updatedAt?: string;
+  idFactory?: () => string;
 };
 
 export function createFeaturesFromText(block?: string, options: FeatureOptions = {}): IdeaFeature[] {
@@ -44,6 +57,31 @@ export function createFeaturesFromText(block?: string, options: FeatureOptions =
     }));
 }
 
+export function parseTagsInput(input?: string): string[] {
+  if (!input) {
+    return [];
+  }
+  return input
+    .split(",")
+    .map((tag) => tag.trim())
+    .filter((tag) => tag.length > 0);
+}
+
+export function createIdea(params: CreateIdeaParams): Idea {
+  const makeId = params.idFactory ?? randomUUID;
+  const createdAt = params.createdAt ?? new Date().toISOString();
+  const updatedAt = params.updatedAt ?? createdAt;
+  return {
+    id: makeId(),
+    title: params.title,
+    summary: params.summary?.trim() || undefined,
+    tags: params.tags ?? [],
+    features: params.features ?? [],
+    createdAt,
+    updatedAt,
+  };
+}
+
 export function formatAbsoluteDate(dateISO: string): string {
   return new Date(dateISO).toLocaleString();
 }
@@ -54,6 +92,10 @@ export function formatIdeaMarkdown(idea: Idea, options: FormatOptions = {}): str
 
   if (idea.summary) {
     lines.push(idea.summary, "");
+  }
+
+  if (idea.tags.length > 0) {
+    lines.push(`**Tags:** ${idea.tags.join(", ")}`, "");
   }
 
   lines.push(`- Created: ${formatDate(idea.createdAt)}`);

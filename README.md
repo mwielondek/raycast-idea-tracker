@@ -3,11 +3,17 @@
 Capture project ideas, append feature bullets in seconds, and export the latest thinking as Markdown without leaving Raycast.
 
 ## Features
-- Browse all ideas in a fast list, automatically sorted by most recently updated.
-- Add new ideas with optional context and seed feature bullets (each line becomes a feature).
-- Append feature bullets to the selected idea via a single-field form (`⌘⇧F`).
-- View the complete idea rendered as Markdown and copy either one idea or the full backlog to the clipboard.
+- Browse all projects in a two-pane list with live detail preview, sorted by last update.
+- Filter projects by tags directly from the search bar dropdown.
+- Add projects with context, comma-separated tags, and optional seed features.
+- Append new feature bullets with an Enter-first shortcut, or expand to a full detail view.
+- Copy a single project or your entire backlog as Markdown for sharing.
 - Data persists locally using Raycast's encrypted `LocalStorage`.
+
+## Commands
+- `List Projects`: main command with list/detail layout, quick append, and exports.
+- `Add Project`: dedicated form for capturing a new project with tags and starter features.
+- `Append Feature`: select a project and append a feature bullet from anywhere.
 
 ## Requirements
 - Raycast 1.81 or newer with the Developer Tools enabled.
@@ -27,7 +33,7 @@ Capture project ideas, append feature bullets in seconds, and export the latest 
 ## Load the Extension into Raycast
 1. Open Raycast and run `Extensions` → `Import Extension`.
 2. Choose the `idea-tracker` folder inside the cloned repository.
-3. Raycast will add the extension. Launch it via `Idea Tracker` or the command palette entry **Open Idea Tracker**.
+3. Raycast will add the extension. Launch **List Projects** to review projects, or use **Add Project** / **Append Feature** as needed.
 
 Changes you make to the source files are reflected immediately when you re-run the command.
 
