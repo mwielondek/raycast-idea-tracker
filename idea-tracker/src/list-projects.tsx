@@ -787,13 +787,10 @@ export function AppendFeatureForm({
 }: AppendFeatureFormProps) {
   const { pop } = useNavigation();
   const availableProjects = (projects ?? []).map(normalizeProject);
-  const initialProjectId = projectId ?? "";
+  const initialProjectId: string | undefined = projectId ?? undefined;
 
   const form = useForm<AppendFeatureValues>({
-    initialValues: {
-      projectId: initialProjectId,
-      feature: "",
-    },
+    initialValues: initialProjectId ? { projectId: initialProjectId, feature: "" } : { feature: "" } as any,
     onSubmit: async (values) => {
       const targetProjectId = projectId ?? values.projectId;
       if (!targetProjectId) {
@@ -843,7 +840,6 @@ export function AppendFeatureForm({
         <Form.Dropdown
           title="Project"
           {...itemProps.projectId}
-          storeValue
           onChange={(value) => {
             setValue("projectId", value);
             if (value) {
