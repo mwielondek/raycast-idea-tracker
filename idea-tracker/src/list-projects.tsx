@@ -454,14 +454,14 @@ function ProjectActions({
           <Action
             title="Unpin Project"
             icon={Icon.Star}
-            shortcut={{ modifiers: ["cmd"], key: "p" }}
+            shortcut={{ modifiers: ["cmd", "opt"], key: "p" }}
             onAction={() => onTogglePin(project.id, false)}
           />
         ) : (
           <Action
             title="Pin Project"
             icon={Icon.Star}
-            shortcut={{ modifiers: ["cmd"], key: "p" }}
+            shortcut={{ modifiers: ["cmd", "opt"], key: "p" }}
             onAction={() => onTogglePin(project.id, true)}
           />
         )}
@@ -586,14 +586,14 @@ function ProjectDetail(props: {
             <Action
               title="Unpin Project"
               icon={Icon.Star}
-              shortcut={{ modifiers: ["cmd"], key: "p" }}
+              shortcut={{ modifiers: ["cmd", "opt"], key: "p" }}
               onAction={() => onTogglePin(latestProject.id, false)}
             />
           ) : (
             <Action
               title="Pin Project"
               icon={Icon.Star}
-              shortcut={{ modifiers: ["cmd"], key: "p" }}
+              shortcut={{ modifiers: ["cmd", "opt"], key: "p" }}
               onAction={() => onTogglePin(latestProject.id, true)}
             />
           )}
