@@ -423,6 +423,18 @@ function ProjectActions({
     <ActionPanel>
       <ActionPanel.Section title="Project">
         <Action.Push
+          title="Append Feature"
+          icon={Icon.PlusCircle}
+          shortcut={{ modifiers: ["cmd", "shift"], key: "f" }}
+          target={
+            <InlineAppendFeatureForm
+              projectId={project.id}
+              projectTitle={project.title}
+              onSubmit={onAppendFeature}
+            />
+          }
+        />
+        <Action.Push
           title="Open Project"
           icon={Icon.TextDocument}
           target={
@@ -435,18 +447,6 @@ function ProjectActions({
               onUpdateProject={onUpdateProject}
               onTogglePin={onTogglePin}
               onToggleArchive={onToggleArchive}
-            />
-          }
-        />
-        <Action.Push
-          title="Append Feature"
-          icon={Icon.PlusCircle}
-          shortcut={{ modifiers: ["cmd", "shift"], key: "f" }}
-          target={
-            <InlineAppendFeatureForm
-              projectId={project.id}
-              projectTitle={project.title}
-              onSubmit={onAppendFeature}
             />
           }
         />
@@ -838,7 +838,6 @@ export function AppendFeatureForm({
           title="Project"
           {...itemProps.projectId}
           storeValue
-          autoFocus
           onChange={(value) => {
             setValue("projectId", value);
             if (value) {
@@ -861,7 +860,7 @@ export function AppendFeatureForm({
         title="Feature Idea"
         placeholder="Describe the feature. Each new line becomes its own bullet."
         {...itemProps.feature}
-        autoFocus
+        autoFocus={Boolean(projectId)}
       />
     </Form>
   );
