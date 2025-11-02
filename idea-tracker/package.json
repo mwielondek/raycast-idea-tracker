@@ -43,13 +43,16 @@
   },
   "devDependencies": {
     "@raycast/eslint-config": "^2.0.4",
-    "@rollup/rollup-darwin-x64": "^4.52.5",
     "@types/node": "^22.13.10",
     "@types/react": "^19.0.10",
     "eslint": "^9.22.0",
     "prettier": "^3.5.3",
     "typescript": "^5.9.3",
     "vitest": "^2.1.9"
+  },
+  "optionalDependencies": {
+    "@rollup/rollup-darwin-arm64": "^4.52.5",
+    "@rollup/rollup-darwin-x64": "^4.52.5"
   },
   "scripts": {
     "build": "ray build",
