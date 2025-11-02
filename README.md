@@ -4,6 +4,7 @@ Capture project ideas, append feature bullets in seconds, and export the latest 
 
 ## Features
 - Browse all projects in a two-pane list with live detail preview, sorted by last update.
+- Pin high-priority projects to the top and archive completed ones without losing history.
 - Filter projects by tags directly from the search bar dropdown.
 - Add projects with context, comma-separated tags, and optional seed features.
 - Append new feature bullets with an Enter-first shortcut, or expand to a full detail view.
@@ -11,7 +12,7 @@ Capture project ideas, append feature bullets in seconds, and export the latest 
 - Data persists locally using Raycast's encrypted `LocalStorage`.
 
 ## Commands
-- `List Projects`: main command with list/detail layout, quick append, and exports.
+- `List Projects`: main command with list/detail layout, tag filtering, pin/archive controls, quick append, and exports.
 - `Add Project`: dedicated form for capturing a new project with tags and starter features.
 - `Append Feature`: select a project and append a feature bullet from anywhere.
 

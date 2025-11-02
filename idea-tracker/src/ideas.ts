@@ -11,6 +11,8 @@ export type Idea = {
   title: string;
   summary?: string;
   tags: string[];
+  isPinned: boolean;
+  isArchived: boolean;
   features: IdeaFeature[];
   createdAt: string;
   updatedAt: string;
@@ -35,6 +37,8 @@ type CreateIdeaParams = {
   createdAt?: string;
   updatedAt?: string;
   idFactory?: () => string;
+  isPinned?: boolean;
+  isArchived?: boolean;
 };
 
 export function createFeaturesFromText(block?: string, options: FeatureOptions = {}): IdeaFeature[] {
@@ -76,6 +80,8 @@ export function createIdea(params: CreateIdeaParams): Idea {
     title: params.title,
     summary: params.summary?.trim() || undefined,
     tags: params.tags ?? [],
+    isPinned: params.isPinned ?? false,
+    isArchived: params.isArchived ?? false,
     features: params.features ?? [],
     createdAt,
     updatedAt,
@@ -93,6 +99,9 @@ export function formatIdeaMarkdown(idea: Idea, options: FormatOptions = {}): str
   if (idea.summary) {
     lines.push(idea.summary, "");
   }
+
+  lines.push(`**Status:** ${idea.isArchived ? "Archived" : idea.isPinned ? "Pinned" : "Active"}`);
+  lines.push("");
 
   if (idea.tags.length > 0) {
     lines.push(`**Tags:** ${idea.tags.join(", ")}`, "");

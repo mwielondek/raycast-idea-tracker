@@ -1,10 +1,6 @@
 import { Action, ActionPanel, Detail, Icon, LaunchType, Toast, launchCommand, showToast } from "@raycast/api";
 import { useLocalStorage } from "@raycast/utils";
-import {
-  IDEAS_STORAGE_KEY,
-  Idea,
-  createFeaturesFromText,
-} from "./ideas";
+import { IDEAS_STORAGE_KEY, Idea, createFeaturesFromText } from "./ideas";
 import { AppendFeatureForm, AppendFeatureValues } from "./list-projects";
 
 export default function AppendFeatureCommand() {
@@ -25,6 +21,11 @@ export default function AppendFeatureCommand() {
     const project = projects.find((item) => item.id === values.projectId);
     if (!project) {
       await showToast(Toast.Style.Failure, "Select an existing project");
+      return false;
+    }
+
+    if (project.isArchived) {
+      await showToast(Toast.Style.Failure, "Project is archived");
       return false;
     }
 
@@ -73,10 +74,24 @@ export default function AppendFeatureCommand() {
     );
   }
 
-  return (
-    <AppendFeatureForm
-      projects={storedProjects}
-      onSubmit={handleAppend}
-    />
-  );
+  const activeProjects = (storedProjects ?? []).filter((project) => !(project.isArchived ?? false));
+
+  if (activeProjects.length === 0) {
+    return (
+      <Detail
+        markdown="### All projects archived\nRestore a project before appending new features to it."
+        actions={
+          <ActionPanel>
+            <Action
+              title="Open List Projects"
+              icon={Icon.AppWindowList}
+              onAction={() => launchCommand({ name: "list-projects", type: LaunchType.UserInitiated })}
+            />
+          </ActionPanel>
+        }
+      />
+    );
+  }
+
+  return <AppendFeatureForm projects={activeProjects} onSubmit={handleAppend} />;
 }

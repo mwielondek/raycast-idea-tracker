@@ -39,6 +39,23 @@ export type AppendFeatureValues = {
   feature: string;
 };
 
+type StoredProject = Omit<Idea, "tags" | "features" | "isPinned" | "isArchived"> & {
+  tags?: string[];
+  features?: Idea["features"];
+  isPinned?: boolean;
+  isArchived?: boolean;
+};
+
+function normalizeProject(project: StoredProject): Idea {
+  return {
+    ...project,
+    tags: project.tags ?? [],
+    features: project.features ?? [],
+    isPinned: project.isPinned ?? false,
+    isArchived: project.isArchived ?? false,
+  };
+}
+
 export default function ListProjectsCommand() {
   const {
     value: storedProjects,
@@ -48,11 +65,13 @@ export default function ListProjectsCommand() {
 
   const [selectedTag, setSelectedTag] = useState<string>("__all");
 
-  const projects = useMemo(() => {
-    return [...(storedProjects ?? [])].sort(
-      (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
-    );
+  const normalizedProjects = useMemo(() => {
+    return (storedProjects ?? []).map(normalizeProject);
   }, [storedProjects]);
+
+  const projects = useMemo(() => {
+    return [...normalizedProjects].sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
+  }, [normalizedProjects]);
 
   const availableTags = useMemo(() => {
     const tagSet = new Set<string>();
@@ -63,10 +82,12 @@ export default function ListProjectsCommand() {
   }, [projects]);
 
   const filteredProjects = useMemo(() => {
-    if (selectedTag === "__all") {
-      return projects;
-    }
-    return projects.filter((project) => project.tags.includes(selectedTag));
+    const list = selectedTag === "__all" ? projects : projects.filter((project) => project.tags.includes(selectedTag));
+    return {
+      pinned: list.filter((project) => project.isPinned && !project.isArchived),
+      active: list.filter((project) => !project.isPinned && !project.isArchived),
+      archived: list.filter((project) => project.isArchived),
+    };
   }, [projects, selectedTag]);
 
   async function handleCreateProject(values: ProjectFormValues): Promise<boolean> {
@@ -112,6 +133,11 @@ export default function ListProjectsCommand() {
       return false;
     }
 
+    if (project.isArchived) {
+      await showToast(Toast.Style.Failure, "Project is archived");
+      return false;
+    }
+
     const now = new Date().toISOString();
     const [nextFeature] = createFeaturesFromText(trimmed, { timestamp: now });
     if (!nextFeature) {
@@ -135,10 +161,46 @@ export default function ListProjectsCommand() {
     return true;
   }
 
-  async function handleDeleteProject(projectId: string) {
-    const next = (storedProjects ?? []).filter((item) => item.id !== projectId);
-    await setProjects(next);
-    await showToast(Toast.Style.Success, "Project deleted");
+async function handleDeleteProject(projectId: string) {
+  const next = (storedProjects ?? []).filter((item) => item.id !== projectId);
+  await setProjects(next);
+  await showToast(Toast.Style.Success, "Project deleted");
+}
+
+  async function handleTogglePin(projectId: string, pin: boolean) {
+    const now = new Date().toISOString();
+    const updated = (storedProjects ?? []).map((item) => {
+      if (item.id !== projectId) {
+        return item;
+      }
+      return {
+        ...item,
+        isPinned: pin,
+        isArchived: pin ? false : item.isArchived ?? false,
+        updatedAt: now,
+      };
+    });
+
+    await setProjects(updated);
+    await showToast(Toast.Style.Success, pin ? "Project pinned" : "Project unpinned");
+  }
+
+  async function handleToggleArchive(projectId: string, archive: boolean) {
+    const now = new Date().toISOString();
+    const updated = (storedProjects ?? []).map((item) => {
+      if (item.id !== projectId) {
+        return item;
+      }
+      return {
+        ...item,
+        isArchived: archive,
+        isPinned: archive ? false : item.isPinned ?? false,
+        updatedAt: now,
+      };
+    });
+
+    await setProjects(updated);
+    await showToast(Toast.Style.Success, archive ? "Project archived" : "Project restored");
   }
 
   return (
@@ -163,7 +225,7 @@ export default function ListProjectsCommand() {
         </List.Dropdown>
       }
     >
-      {filteredProjects.length === 0 ? (
+      {filteredProjects.pinned.length === 0 && filteredProjects.active.length === 0 && filteredProjects.archived.length === 0 ? (
         <List.EmptyView
           icon={Icon.Plus}
           title="Start tracking your first project"
@@ -175,76 +237,173 @@ export default function ListProjectsCommand() {
           }
         />
       ) : (
-        filteredProjects.map((project) => {
-          const accessories: List.Item.Accessory[] = [
-            { tag: { value: `${project.features.length} feature${project.features.length === 1 ? "" : "s"}` } },
-            {
-              date: new Date(project.updatedAt),
-              tooltip: `Updated ${formatAbsoluteDate(project.updatedAt)}`,
-            },
-          ];
-
-          if (project.tags.length > 0) {
-            accessories.unshift({
-              tag: { value: project.tags.join(", "), color: Color.Blue },
-            });
-          }
-
-          return (
-            <List.Item
-              key={project.id}
-              title={project.title}
-              subtitle={project.summary}
-              keywords={[project.summary ?? "", ...project.tags]}
-              accessories={accessories}
-              detail={
-                <List.Item.Detail
-                  markdown={formatIdeaMarkdown(project)}
-                  metadata={
-                    <List.Item.Detail.Metadata>
-                      <List.Item.Detail.Metadata.Label title="Updated" text={formatAbsoluteDate(project.updatedAt)} />
-                      <List.Item.Detail.Metadata.Label title="Created" text={formatAbsoluteDate(project.createdAt)} />
-                      {project.tags.length > 0 && (
-                        <>
-                          <List.Item.Detail.Metadata.Separator />
-                          <List.Item.Detail.Metadata.Label title="Tags" text={project.tags.join(", ")} />
-                        </>
-                      )}
-                      <List.Item.Detail.Metadata.Separator />
-                      <List.Item.Detail.Metadata.Label title="Feature Count" text={String(project.features.length)} />
-                    </List.Item.Detail.Metadata>
-                  }
-                />
-              }
-              actions={
-                <ProjectActions
+        <>
+          {filteredProjects.pinned.length > 0 && (
+            <List.Section title="Pinned Projects">
+              {filteredProjects.pinned.map((project) => (
+                <ProjectListItem
+                  key={project.id}
                   project={project}
+                  allProjects={projects}
                   onAppendFeature={handleAppendFeature}
                   onDelete={handleDeleteProject}
                   onCreateProject={handleCreateProject}
-                  onCopyAll={async () => {
-                    await Clipboard.copy(formatIdeasMarkdown(projects));
-                    await showHUD("Copied all projects");
-                  }}
+                  onTogglePin={handleTogglePin}
+                  onToggleArchive={handleToggleArchive}
                 />
-              }
-            />
-          );
-        })
+              ))}
+            </List.Section>
+          )}
+
+          <List.Section title="Projects">
+            {filteredProjects.active.length === 0 ? (
+              <List.Item
+                title="No active projects"
+                icon={Icon.Tray}
+                accessories={
+                  selectedTag === "__all" ? undefined : [{ tag: { value: selectedTag, color: Color.Blue } }]
+                }
+              />
+            ) : (
+              filteredProjects.active.map((project) => (
+                <ProjectListItem
+                  key={project.id}
+                  project={project}
+                  allProjects={projects}
+                  onAppendFeature={handleAppendFeature}
+                  onDelete={handleDeleteProject}
+                  onCreateProject={handleCreateProject}
+                  onTogglePin={handleTogglePin}
+                  onToggleArchive={handleToggleArchive}
+                />
+              ))
+            )}
+          </List.Section>
+
+          {filteredProjects.archived.length > 0 && (
+            <List.Section title="Archived Projects">
+              {filteredProjects.archived.map((project) => (
+                <ProjectListItem
+                  key={project.id}
+                  project={project}
+                  allProjects={projects}
+                  onAppendFeature={handleAppendFeature}
+                  onDelete={handleDeleteProject}
+                  onCreateProject={handleCreateProject}
+                  onTogglePin={handleTogglePin}
+                  onToggleArchive={handleToggleArchive}
+                />
+              ))}
+            </List.Section>
+          )}
+        </>
       )}
     </List>
   );
 }
 
-type ProjectActionsProps = {
+type ProjectListItemProps = {
   project: Idea;
+  allProjects: Idea[];
   onAppendFeature: (projectId: string, feature: string) => Promise<boolean>;
   onDelete: (projectId: string) => Promise<void>;
   onCreateProject: (values: ProjectFormValues) => Promise<boolean>;
-  onCopyAll: () => Promise<void>;
+  onTogglePin: (projectId: string, pin: boolean) => Promise<void>;
+  onToggleArchive: (projectId: string, archive: boolean) => Promise<void>;
 };
 
-function ProjectActions({ project, onAppendFeature, onDelete, onCreateProject, onCopyAll }: ProjectActionsProps) {
+function ProjectListItem({
+  project,
+  allProjects,
+  onAppendFeature,
+  onDelete,
+  onCreateProject,
+  onTogglePin,
+  onToggleArchive,
+}: ProjectListItemProps) {
+  const accessories: List.Item.Accessory[] = [
+    { tag: { value: `${project.features.length} feature${project.features.length === 1 ? "" : "s"}` } },
+    {
+      date: new Date(project.updatedAt),
+      tooltip: `Updated ${formatAbsoluteDate(project.updatedAt)}`,
+    },
+  ];
+
+  if (project.tags.length > 0) {
+    accessories.unshift({
+      tag: { value: project.tags.join(", "), color: Color.Blue },
+    });
+  }
+
+  if (project.isArchived) {
+    accessories.unshift({ tag: { value: "Archived" } });
+  }
+
+  if (project.isPinned) {
+    accessories.unshift({ tag: { value: "Pinned", color: Color.Yellow } });
+  }
+
+  return (
+    <List.Item
+      title={project.title}
+      subtitle={project.summary}
+      keywords={[project.summary ?? "", ...project.tags]}
+      accessories={accessories}
+      detail={
+        <List.Item.Detail
+          markdown={formatIdeaMarkdown(project)}
+          metadata={
+            <List.Item.Detail.Metadata>
+              <List.Item.Detail.Metadata.Label title="Status" text={project.isArchived ? "Archived" : project.isPinned ? "Pinned" : "Active"} />
+              <List.Item.Detail.Metadata.Separator />
+              <List.Item.Detail.Metadata.Label title="Updated" text={formatAbsoluteDate(project.updatedAt)} />
+              <List.Item.Detail.Metadata.Label title="Created" text={formatAbsoluteDate(project.createdAt)} />
+              {project.tags.length > 0 && (
+                <>
+                  <List.Item.Detail.Metadata.Separator />
+                  <List.Item.Detail.Metadata.Label title="Tags" text={project.tags.join(", ")} />
+                </>
+              )}
+              <List.Item.Detail.Metadata.Separator />
+              <List.Item.Detail.Metadata.Label title="Feature Count" text={String(project.features.length)} />
+            </List.Item.Detail.Metadata>
+          }
+        />
+      }
+      actions={
+        <ProjectActions
+          project={project}
+          allProjects={allProjects}
+          onAppendFeature={onAppendFeature}
+          onDelete={onDelete}
+          onCreateProject={onCreateProject}
+          onTogglePin={onTogglePin}
+          onToggleArchive={onToggleArchive}
+        />
+      }
+    />
+  );
+}
+
+type ProjectActionsProps = {
+  project: Idea;
+  allProjects: Idea[];
+  onAppendFeature: (projectId: string, feature: string) => Promise<boolean>;
+  onDelete: (projectId: string) => Promise<void>;
+  onCreateProject: (values: ProjectFormValues) => Promise<boolean>;
+  onTogglePin: (projectId: string, pin: boolean) => Promise<void>;
+  onToggleArchive: (projectId: string, archive: boolean) => Promise<void>;
+};
+
+function ProjectActions({
+  project,
+  allProjects,
+  onAppendFeature,
+  onDelete,
+  onCreateProject,
+  onTogglePin,
+  onToggleArchive,
+}: ProjectActionsProps) {
   return (
     <ActionPanel>
       <ActionPanel.Section title="Project">
@@ -283,9 +442,42 @@ function ProjectActions({ project, onAppendFeature, onDelete, onCreateProject, o
           icon={Icon.List}
           shortcut={{ modifiers: ["cmd", "shift"], key: "c" }}
           onAction={async () => {
-            await onCopyAll();
+            await Clipboard.copy(formatIdeasMarkdown(allProjects));
+            await showHUD("Copied all projects");
           }}
         />
+      </ActionPanel.Section>
+
+      <ActionPanel.Section title="Status">
+        {project.isPinned ? (
+          <Action
+            title="Unpin Project"
+            icon={Icon.Pin}
+            shortcut={{ modifiers: ["cmd"], key: "p" }}
+            onAction={() => onTogglePin(project.id, false)}
+          />
+        ) : (
+          <Action
+            title="Pin Project"
+            icon={Icon.Pin}
+            shortcut={{ modifiers: ["cmd"], key: "p" }}
+            onAction={() => onTogglePin(project.id, true)}
+          />
+        )}
+        {project.isArchived ? (
+          <Action
+            title="Restore Project"
+            icon={Icon.RotateAntiClockwise}
+            shortcut={{ modifiers: ["cmd", "shift"], key: "l" }}
+            onAction={() => onToggleArchive(project.id, false)}
+          />
+        ) : (
+          <Action
+            title="Archive Project"
+            shortcut={{ modifiers: ["cmd", "shift"], key: "l" }}
+            onAction={() => onToggleArchive(project.id, true)}
+          />
+        )}
       </ActionPanel.Section>
 
       <ActionPanel.Section title="Navigate">
@@ -418,7 +610,10 @@ export function AppendFeatureForm({
   onSubmit,
 }: AppendFeatureFormProps) {
   const { pop } = useNavigation();
-  const [selectedProject, setSelectedProject] = useState<string | undefined>(defaultValues?.projectId ?? projectId);
+  const availableProjects = projects ? projects.map(normalizeProject).filter((project) => !project.isArchived) : [];
+  const [selectedProject, setSelectedProject] = useState<string | undefined>(
+    defaultValues?.projectId ?? projectId ?? availableProjects[0]?.id,
+  );
 
   return (
     <Form
@@ -429,7 +624,7 @@ export function AppendFeatureForm({
             title="Add Feature"
             shortcut={{ modifiers: ["cmd"], key: "enter" }}
             onSubmit={async (values: AppendFeatureValues) => {
-              const targetProjectId = projectId ?? values.projectId ?? selectedProject;
+              const targetProjectId = projectId ?? values.projectId ?? selectedProject ?? availableProjects[0]?.id;
               if (!targetProjectId) {
                 await showToast(Toast.Style.Failure, "Select a project");
                 return;
@@ -443,15 +638,15 @@ export function AppendFeatureForm({
         </ActionPanel>
       }
     >
-      {!projectId && projects && (
+      {!projectId && availableProjects.length > 0 && (
         <Form.Dropdown
           id="projectId"
           title="Project"
           storeValue
-          value={selectedProject}
+          value={selectedProject ?? availableProjects[0]?.id}
           onChange={setSelectedProject}
         >
-          {projects.map((project) => (
+          {availableProjects.map((project) => (
             <Form.Dropdown.Item key={project.id} value={project.id} title={project.title} />
           ))}
         </Form.Dropdown>
