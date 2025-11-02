@@ -1,21 +1,23 @@
 import {
   Action,
   ActionPanel,
+  Alert,
   Clipboard,
   Color,
   Detail,
   Form,
   Icon,
-  launchCommand,
   LaunchType,
   List,
   Toast,
+  confirmAlert,
+  launchCommand,
   showHUD,
   showToast,
   useNavigation,
 } from "@raycast/api";
-import { useLocalStorage } from "@raycast/utils";
-import { useMemo, useState } from "react";
+import { useLocalStorage, useForm } from "@raycast/utils";
+import { useMemo } from "react";
 import {
   IDEAS_STORAGE_KEY,
   Idea,
@@ -26,6 +28,8 @@ import {
   formatIdeasMarkdown,
   parseTagsInput,
 } from "./ideas";
+
+const TAG_COLORS = [Color.Blue, Color.Red, Color.Green, Color.Orange, Color.Purple, Color.Magenta, Color.Yellow, Color.PrimaryText];
 
 export type ProjectFormValues = {
   title: string;
@@ -46,16 +50,6 @@ type StoredProject = Omit<Idea, "tags" | "features" | "isPinned" | "isArchived">
   isArchived?: boolean;
 };
 
-function normalizeProject(project: StoredProject): Idea {
-  return {
-    ...project,
-    tags: project.tags ?? [],
-    features: project.features ?? [],
-    isPinned: project.isPinned ?? false,
-    isArchived: project.isArchived ?? false,
-  };
-}
-
 export default function ListProjectsCommand() {
   const {
     value: storedProjects,
@@ -63,15 +57,18 @@ export default function ListProjectsCommand() {
     isLoading,
   } = useLocalStorage<Idea[]>(IDEAS_STORAGE_KEY, []);
 
-  const [selectedTag, setSelectedTag] = useState<string>("__all");
-
-  const normalizedProjects = useMemo(() => {
-    return (storedProjects ?? []).map(normalizeProject);
+  const projects = useMemo(() => {
+    return [...(storedProjects ?? []).map(normalizeProject)].sort(
+      (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
+    );
   }, [storedProjects]);
 
-  const projects = useMemo(() => {
-    return [...normalizedProjects].sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
-  }, [normalizedProjects]);
+  const {
+    value: tagFilter,
+    setValue: setTagFilter,
+  } = useLocalStorage<string>("raycast-idea-tracker/tag-filter", "__all");
+
+  const selectedTag = tagFilter ?? "__all";
 
   const availableTags = useMemo(() => {
     const tagSet = new Set<string>();
@@ -119,6 +116,34 @@ export default function ListProjectsCommand() {
     }
   }
 
+  async function handleUpdateProject(projectId: string, values: ProjectFormValues): Promise<boolean> {
+    const title = values.title?.trim();
+    if (!title) {
+      await showToast(Toast.Style.Failure, "Project name is required");
+      return false;
+    }
+
+    const tags = parseTagsInput(values.tags);
+    const now = new Date().toISOString();
+
+    const updated = (storedProjects ?? []).map((project) => {
+      if (project.id !== projectId) {
+        return project;
+      }
+      return {
+        ...project,
+        title,
+        summary: values.summary?.trim() || undefined,
+        tags,
+        updatedAt: now,
+      };
+    });
+
+    await setProjects(updated);
+    await showToast(Toast.Style.Success, "Project updated");
+    return true;
+  }
+
   async function handleAppendFeature(projectId: string, featureText: string): Promise<boolean> {
     const trimmed = featureText.trim();
     if (!trimmed) {
@@ -161,12 +186,6 @@ export default function ListProjectsCommand() {
     return true;
   }
 
-async function handleDeleteProject(projectId: string) {
-  const next = (storedProjects ?? []).filter((item) => item.id !== projectId);
-  await setProjects(next);
-  await showToast(Toast.Style.Success, "Project deleted");
-}
-
   async function handleTogglePin(projectId: string, pin: boolean) {
     const now = new Date().toISOString();
     const updated = (storedProjects ?? []).map((item) => {
@@ -203,18 +222,33 @@ async function handleDeleteProject(projectId: string) {
     await showToast(Toast.Style.Success, archive ? "Project archived" : "Project restored");
   }
 
+  async function handleDeleteProject(projectId: string) {
+    const confirmed = await confirmAlert({
+      title: "Delete project?",
+      message: "This will permanently remove the project and all captured features.",
+      primaryAction: { title: "Delete", style: Alert.ActionStyle.Destructive },
+    });
+
+    if (!confirmed) {
+      return;
+    }
+
+    const next = (storedProjects ?? []).filter((item) => item.id !== projectId);
+    await setProjects(next);
+    await showToast(Toast.Style.Success, "Project deleted");
+  }
+
   return (
     <List
       isLoading={isLoading}
-      isShowingDetail
       throttle
       searchBarPlaceholder="Search projects or features"
       searchBarAccessory={
         <List.Dropdown
           tooltip="Filter by tag"
           storeValue
-          onChange={setSelectedTag}
           value={selectedTag}
+          onChange={(value) => void setTagFilter(value)}
         >
           <List.Dropdown.Item value="__all" title="All tags" />
           <List.Dropdown.Section title="Tags">
@@ -225,7 +259,9 @@ async function handleDeleteProject(projectId: string) {
         </List.Dropdown>
       }
     >
-      {filteredProjects.pinned.length === 0 && filteredProjects.active.length === 0 && filteredProjects.archived.length === 0 ? (
+      {filteredProjects.pinned.length === 0 &&
+      filteredProjects.active.length === 0 &&
+      filteredProjects.archived.length === 0 ? (
         <List.EmptyView
           icon={Icon.Plus}
           title="Start tracking your first project"
@@ -248,6 +284,7 @@ async function handleDeleteProject(projectId: string) {
                   onAppendFeature={handleAppendFeature}
                   onDelete={handleDeleteProject}
                   onCreateProject={handleCreateProject}
+                  onUpdateProject={handleUpdateProject}
                   onTogglePin={handleTogglePin}
                   onToggleArchive={handleToggleArchive}
                 />
@@ -261,7 +298,7 @@ async function handleDeleteProject(projectId: string) {
                 title="No active projects"
                 icon={Icon.Tray}
                 accessories={
-                  selectedTag === "__all" ? undefined : [{ tag: { value: selectedTag, color: Color.Blue } }]
+                  selectedTag === "__all" ? undefined : [{ tag: { value: selectedTag, color: tagColor(selectedTag) } }]
                 }
               />
             ) : (
@@ -273,6 +310,7 @@ async function handleDeleteProject(projectId: string) {
                   onAppendFeature={handleAppendFeature}
                   onDelete={handleDeleteProject}
                   onCreateProject={handleCreateProject}
+                  onUpdateProject={handleUpdateProject}
                   onTogglePin={handleTogglePin}
                   onToggleArchive={handleToggleArchive}
                 />
@@ -290,6 +328,7 @@ async function handleDeleteProject(projectId: string) {
                   onAppendFeature={handleAppendFeature}
                   onDelete={handleDeleteProject}
                   onCreateProject={handleCreateProject}
+                  onUpdateProject={handleUpdateProject}
                   onTogglePin={handleTogglePin}
                   onToggleArchive={handleToggleArchive}
                 />
@@ -308,6 +347,7 @@ type ProjectListItemProps = {
   onAppendFeature: (projectId: string, feature: string) => Promise<boolean>;
   onDelete: (projectId: string) => Promise<void>;
   onCreateProject: (values: ProjectFormValues) => Promise<boolean>;
+  onUpdateProject: (projectId: string, values: ProjectFormValues) => Promise<boolean>;
   onTogglePin: (projectId: string, pin: boolean) => Promise<void>;
   onToggleArchive: (projectId: string, archive: boolean) => Promise<void>;
 };
@@ -318,30 +358,18 @@ function ProjectListItem({
   onAppendFeature,
   onDelete,
   onCreateProject,
+  onUpdateProject,
   onTogglePin,
   onToggleArchive,
 }: ProjectListItemProps) {
-  const accessories: List.Item.Accessory[] = [
-    { tag: { value: `${project.features.length} feature${project.features.length === 1 ? "" : "s"}` } },
-    {
-      date: new Date(project.updatedAt),
-      tooltip: `Updated ${formatAbsoluteDate(project.updatedAt)}`,
-    },
-  ];
+  const accessories: List.Item.Accessory[] = project.tags.map((tag) => ({
+    tag: { value: tag, color: tagColor(tag) },
+  }));
 
-  if (project.tags.length > 0) {
-    accessories.unshift({
-      tag: { value: project.tags.join(", "), color: Color.Blue },
-    });
-  }
-
-  if (project.isArchived) {
-    accessories.unshift({ tag: { value: "Archived" } });
-  }
-
-  if (project.isPinned) {
-    accessories.unshift({ tag: { value: "Pinned", color: Color.Yellow } });
-  }
+  accessories.push({
+    text: formatRelativeTime(project.updatedAt),
+    tooltip: `Updated ${formatAbsoluteDate(project.updatedAt)}`,
+  });
 
   return (
     <List.Item
@@ -349,27 +377,6 @@ function ProjectListItem({
       subtitle={project.summary}
       keywords={[project.summary ?? "", ...project.tags]}
       accessories={accessories}
-      detail={
-        <List.Item.Detail
-          markdown={formatIdeaMarkdown(project)}
-          metadata={
-            <List.Item.Detail.Metadata>
-              <List.Item.Detail.Metadata.Label title="Status" text={project.isArchived ? "Archived" : project.isPinned ? "Pinned" : "Active"} />
-              <List.Item.Detail.Metadata.Separator />
-              <List.Item.Detail.Metadata.Label title="Updated" text={formatAbsoluteDate(project.updatedAt)} />
-              <List.Item.Detail.Metadata.Label title="Created" text={formatAbsoluteDate(project.createdAt)} />
-              {project.tags.length > 0 && (
-                <>
-                  <List.Item.Detail.Metadata.Separator />
-                  <List.Item.Detail.Metadata.Label title="Tags" text={project.tags.join(", ")} />
-                </>
-              )}
-              <List.Item.Detail.Metadata.Separator />
-              <List.Item.Detail.Metadata.Label title="Feature Count" text={String(project.features.length)} />
-            </List.Item.Detail.Metadata>
-          }
-        />
-      }
       actions={
         <ProjectActions
           project={project}
@@ -377,6 +384,7 @@ function ProjectListItem({
           onAppendFeature={onAppendFeature}
           onDelete={onDelete}
           onCreateProject={onCreateProject}
+          onUpdateProject={onUpdateProject}
           onTogglePin={onTogglePin}
           onToggleArchive={onToggleArchive}
         />
@@ -391,6 +399,7 @@ type ProjectActionsProps = {
   onAppendFeature: (projectId: string, feature: string) => Promise<boolean>;
   onDelete: (projectId: string) => Promise<void>;
   onCreateProject: (values: ProjectFormValues) => Promise<boolean>;
+  onUpdateProject: (projectId: string, values: ProjectFormValues) => Promise<boolean>;
   onTogglePin: (projectId: string, pin: boolean) => Promise<void>;
   onToggleArchive: (projectId: string, archive: boolean) => Promise<void>;
 };
@@ -401,6 +410,7 @@ function ProjectActions({
   onAppendFeature,
   onDelete,
   onCreateProject,
+  onUpdateProject,
   onTogglePin,
   onToggleArchive,
 }: ProjectActionsProps) {
@@ -408,9 +418,14 @@ function ProjectActions({
     <ActionPanel>
       <ActionPanel.Section title="Project">
         <Action.Push
+          title="Open Project"
+          icon={Icon.TextDocument}
+          target={<ProjectDetail project={project} />}
+        />
+        <Action.Push
           title="Append Feature"
           icon={Icon.PlusCircle}
-          shortcut={{ modifiers: [], key: "return" }}
+          shortcut={{ modifiers: ["cmd", "shift"], key: "f" }}
           target={
             <InlineAppendFeatureForm
               projectId={project.id}
@@ -420,11 +435,41 @@ function ProjectActions({
           }
         />
         <Action.Push
-          title="Expand Project Detail"
-          icon={Icon.AppWindowSidebarRight}
-          shortcut={{ modifiers: ["cmd"], key: "enter" }}
-          target={<ProjectDetail project={project} />}
+          title="Edit Project"
+          icon={Icon.Pencil}
+          shortcut={{ modifiers: ["cmd"], key: "e" }}
+          target={<EditProjectForm project={project} onSubmit={(values) => onUpdateProject(project.id, values)} />}
         />
+        {project.isPinned ? (
+          <Action
+            title="Unpin Project"
+            icon={Icon.Pin}
+            shortcut={{ modifiers: ["cmd"], key: "p" }}
+            onAction={() => onTogglePin(project.id, false)}
+          />
+        ) : (
+          <Action
+            title="Pin Project"
+            icon={Icon.Pin}
+            shortcut={{ modifiers: ["cmd"], key: "p" }}
+            onAction={() => onTogglePin(project.id, true)}
+          />
+        )}
+        {project.isArchived ? (
+          <Action
+            title="Restore Project"
+            icon={Icon.RotateAntiClockwise}
+            shortcut={{ modifiers: ["cmd", "shift"], key: "a" }}
+            onAction={() => onToggleArchive(project.id, false)}
+          />
+        ) : (
+          <Action
+            title="Archive Project"
+            icon={Icon.Tray}
+            shortcut={{ modifiers: ["cmd", "shift"], key: "a" }}
+            onAction={() => onToggleArchive(project.id, true)}
+          />
+        )}
       </ActionPanel.Section>
 
       <ActionPanel.Section title="Export">
@@ -446,38 +491,6 @@ function ProjectActions({
             await showHUD("Copied all projects");
           }}
         />
-      </ActionPanel.Section>
-
-      <ActionPanel.Section title="Status">
-        {project.isPinned ? (
-          <Action
-            title="Unpin Project"
-            icon={Icon.Pin}
-            shortcut={{ modifiers: ["cmd"], key: "p" }}
-            onAction={() => onTogglePin(project.id, false)}
-          />
-        ) : (
-          <Action
-            title="Pin Project"
-            icon={Icon.Pin}
-            shortcut={{ modifiers: ["cmd"], key: "p" }}
-            onAction={() => onTogglePin(project.id, true)}
-          />
-        )}
-        {project.isArchived ? (
-          <Action
-            title="Restore Project"
-            icon={Icon.RotateAntiClockwise}
-            shortcut={{ modifiers: ["cmd", "shift"], key: "l" }}
-            onAction={() => onToggleArchive(project.id, false)}
-          />
-        ) : (
-          <Action
-            title="Archive Project"
-            shortcut={{ modifiers: ["cmd", "shift"], key: "l" }}
-            onAction={() => onToggleArchive(project.id, true)}
-          />
-        )}
       </ActionPanel.Section>
 
       <ActionPanel.Section title="Navigate">
@@ -505,7 +518,7 @@ function ProjectActions({
           icon={Icon.Trash}
           style={Action.Style.Destructive}
           shortcut={{ modifiers: ["ctrl"], key: "x" }}
-          onAction={() => onDelete(project.id)}
+          onAction={async () => onDelete(project.id)}
         />
       </ActionPanel.Section>
     </ActionPanel>
@@ -518,21 +531,13 @@ function InlineAppendFeatureForm(props: {
   onSubmit: (projectId: string, feature: string) => Promise<boolean>;
 }) {
   const { projectId, projectTitle, onSubmit } = props;
-  const { pop } = useNavigation();
 
   return (
     <AppendFeatureForm
-      defaultValues={{ projectId, feature: "" }}
-      projectId={projectId}
-      projects={undefined}
       navigationTitle={`Append Feature • ${projectTitle}`}
-      onSubmit={async (values) => {
-        const success = await onSubmit(values.projectId, values.feature);
-        if (success) {
-          pop();
-        }
-        return success;
-      }}
+      projectId={projectId}
+      closeOnSuccess
+      onSubmit={(values) => onSubmit(values.projectId, values.feature)}
     />
   );
 }
@@ -559,15 +564,60 @@ function ProjectDetail({ project }: { project: Idea }) {
 }
 
 export function AddProjectForm({ onSubmit }: { onSubmit: (values: ProjectFormValues) => Promise<boolean> }) {
+  return (
+    <ProjectForm
+      navigationTitle="Add Project"
+      submitLabel="Create Project"
+      initialValues={{ title: "", summary: "", tags: "", initialFeatures: "" }}
+      onSubmit={onSubmit}
+    />
+  );
+}
+
+function EditProjectForm({
+  project,
+  onSubmit,
+}: {
+  project: Idea;
+  onSubmit: (values: ProjectFormValues) => Promise<boolean>;
+}) {
+  return (
+    <ProjectForm
+      navigationTitle={`Edit Project • ${project.title}`}
+      submitLabel="Save Changes"
+      initialValues={{
+        title: project.title,
+        summary: project.summary ?? "",
+        tags: project.tags.join(", "),
+      }}
+      includeInitialFeatures={false}
+      onSubmit={onSubmit}
+    />
+  );
+}
+
+function ProjectForm({
+  navigationTitle,
+  submitLabel,
+  initialValues,
+  onSubmit,
+  includeInitialFeatures = true,
+}: {
+  navigationTitle: string;
+  submitLabel: string;
+  initialValues: Partial<ProjectFormValues>;
+  onSubmit: (values: ProjectFormValues) => Promise<boolean>;
+  includeInitialFeatures?: boolean;
+}) {
   const { pop } = useNavigation();
 
   return (
     <Form
-      navigationTitle="Add Project"
+      navigationTitle={navigationTitle}
       actions={
         <ActionPanel>
           <Action.SubmitForm
-            title="Create Project"
+            title={submitLabel}
             onSubmit={async (values: ProjectFormValues) => {
               const success = await onSubmit(values);
               if (success) {
@@ -578,18 +628,28 @@ export function AddProjectForm({ onSubmit }: { onSubmit: (values: ProjectFormVal
         </ActionPanel>
       }
     >
-      <Form.TextField id="title" title="Project Name" placeholder="AI nutrition coach" autoFocus />
+      <Form.TextField id="title" title="Project Name" defaultValue={initialValues.title} autoFocus />
       <Form.TextArea
         id="summary"
         title="Context"
         placeholder="Problem statement, value proposition, or notes"
+        defaultValue={initialValues.summary}
       />
-      <Form.TextField id="tags" title="Tags" placeholder="growth, productivity" info="Comma-separated tags" />
-      <Form.TextArea
-        id="initialFeatures"
-        title="Initial Features"
-        placeholder="Each line becomes a feature bullet"
+      <Form.TextField
+        id="tags"
+        title="Tags"
+        placeholder="growth, productivity"
+        info="Comma-separated tags"
+        defaultValue={initialValues.tags}
       />
+      {includeInitialFeatures && (
+        <Form.TextArea
+          id="initialFeatures"
+          title="Initial Features"
+          placeholder="Each line becomes a feature bullet"
+          defaultValue={initialValues.initialFeatures}
+        />
+      )}
     </Form>
   );
 }
@@ -598,22 +658,39 @@ type AppendFeatureFormProps = {
   navigationTitle?: string;
   projectId?: string;
   projects?: Idea[];
-  defaultValues?: Partial<AppendFeatureValues>;
   onSubmit: (values: AppendFeatureValues) => Promise<boolean>;
+  closeOnSuccess?: boolean;
 };
 
 export function AppendFeatureForm({
   navigationTitle = "Append Feature",
   projectId,
   projects,
-  defaultValues,
   onSubmit,
+  closeOnSuccess = false,
 }: AppendFeatureFormProps) {
   const { pop } = useNavigation();
-  const availableProjects = projects ? projects.map(normalizeProject).filter((project) => !project.isArchived) : [];
-  const [selectedProject, setSelectedProject] = useState<string | undefined>(
-    defaultValues?.projectId ?? projectId ?? availableProjects[0]?.id,
-  );
+  const availableProjects = (projects ?? []).map(normalizeProject);
+  const initialProjectId = projectId ?? availableProjects[0]?.id ?? "";
+
+  const form = useForm<AppendFeatureValues>({
+    initialValues: {
+      projectId: initialProjectId,
+      feature: "",
+    },
+    onSubmit: async (values) => {
+      const targetProjectId = projectId ?? values.projectId;
+      if (!targetProjectId) {
+        await showToast(Toast.Style.Failure, "Select a project");
+        return false;
+      }
+      const success = await onSubmit({ projectId: targetProjectId, feature: values.feature });
+      if (success && closeOnSuccess) {
+        pop();
+      }
+      return success;
+    },
+  });
 
   return (
     <Form
@@ -623,41 +700,86 @@ export function AppendFeatureForm({
           <Action.SubmitForm
             title="Add Feature"
             shortcut={{ modifiers: ["cmd"], key: "enter" }}
-            onSubmit={async (values: AppendFeatureValues) => {
-              const targetProjectId = projectId ?? values.projectId ?? selectedProject ?? availableProjects[0]?.id;
-              if (!targetProjectId) {
-                await showToast(Toast.Style.Failure, "Select a project");
-                return;
-              }
-              const success = await onSubmit({ projectId: targetProjectId, feature: values.feature });
-              if (success) {
-                pop();
-              }
-            }}
+            onSubmit={form.handleSubmit}
           />
+          {!projectId && availableProjects.length > 0 && (
+            <Action
+              title="Focus Project Picker"
+              icon={Icon.CommandSymbol}
+              shortcut={{ modifiers: ["cmd"], key: "p" }}
+              onAction={() => form.focus("projectId")}
+            />
+          )}
         </ActionPanel>
       }
     >
       {!projectId && availableProjects.length > 0 && (
-        <Form.Dropdown
-          id="projectId"
-          title="Project"
-          storeValue
-          value={selectedProject ?? availableProjects[0]?.id}
-          onChange={setSelectedProject}
-        >
+        <Form.Dropdown title="Project" {...form.itemProps.projectId} storeValue>
           {availableProjects.map((project) => (
-            <Form.Dropdown.Item key={project.id} value={project.id} title={project.title} />
+            <Form.Dropdown.Item
+              key={project.id}
+              value={project.id}
+              title={project.title}
+              icon={project.isPinned ? Icon.Pin : project.isArchived ? Icon.Tray : Icon.Circle}
+            />
           ))}
         </Form.Dropdown>
       )}
       <Form.TextArea
-        id="feature"
         title="Feature Idea"
         placeholder="Outline the feature or enhancement to append"
-        defaultValue={defaultValues?.feature}
+        {...form.itemProps.feature}
         autoFocus
       />
     </Form>
   );
+}
+
+function normalizeProject(project: StoredProject): Idea {
+  return {
+    ...project,
+    tags: project.tags ?? [],
+    features: project.features ?? [],
+    isPinned: project.isPinned ?? false,
+    isArchived: project.isArchived ?? false,
+  };
+}
+
+function tagColor(tag: string): Color {
+  const index = Math.abs(hashCode(tag)) % TAG_COLORS.length;
+  return TAG_COLORS[index];
+}
+
+function hashCode(value: string): number {
+  let hash = 0;
+  for (const char of value) {
+    hash = (hash << 5) - hash + char.charCodeAt(0);
+    hash |= 0;
+  }
+  return hash;
+}
+
+function formatRelativeTime(dateISO: string): string {
+  const formatter = new Intl.RelativeTimeFormat(undefined, { numeric: "auto" });
+  const now = Date.now();
+  const date = new Date(dateISO).getTime();
+  const diff = date - now;
+  const divisions: [number, Intl.RelativeTimeFormatUnit][] = [
+    [60, "second"],
+    [60, "minute"],
+    [24, "hour"],
+    [7, "day"],
+    [4.34524, "week"],
+    [12, "month"],
+    [Number.POSITIVE_INFINITY, "year"],
+  ];
+
+  let duration = diff / 1000;
+  for (const [amount, unit] of divisions) {
+    if (Math.abs(duration) < amount) {
+      return formatter.format(Math.round(duration), unit);
+    }
+    duration /= amount;
+  }
+  return formatter.format(Math.round(duration), "year");
 }
