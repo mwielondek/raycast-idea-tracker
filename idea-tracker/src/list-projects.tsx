@@ -294,7 +294,19 @@ export default function ListProjectsCommand() {
 
           <List.Section title="Projects" subtitle={`${filteredProjects.active.length}`}>
             {filteredProjects.active.length === 0 ? (
-              <List.Item title="No active projects" icon={Icon.Tray} />
+              <List.Item
+                title="No active projects"
+                icon={Icon.Tray}
+                actions={
+                  <ActionPanel>
+                    <Action.Push
+                      title="Add Project"
+                      icon={Icon.Plus}
+                      target={<AddProjectForm onSubmit={handleCreateProject} />}
+                    />
+                  </ActionPanel>
+                }
+              />
             ) : (
               filteredProjects.active.map((project) => (
                 <ProjectListItem
