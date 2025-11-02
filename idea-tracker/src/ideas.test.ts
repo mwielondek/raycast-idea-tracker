@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { Idea, createFeaturesFromText, formatIdeaMarkdown, formatIdeasMarkdown, parseTagsInput } from "./ideas";
+import {
+  Idea,
+  createFeaturesFromText,
+  createIdea,
+  formatIdeaMarkdown,
+  formatIdeasMarkdown,
+  mergeFeatureBodies,
+  parseTagsInput,
+} from "./ideas";
 
 describe("createFeaturesFromText", () => {
   it("returns an empty array when no content provided", () => {
@@ -23,6 +31,68 @@ describe("createFeaturesFromText", () => {
       { id: "feature-1", content: "Signup flow", createdAt: "2025-01-01T00:00:00.000Z" },
       { id: "feature-2", content: "Analytics dashboard", createdAt: "2025-01-01T00:00:00.000Z" },
     ]);
+  });
+});
+
+describe("createIdea", () => {
+  it("generates default values and trims summary", () => {
+    const idea = createIdea({
+      title: "   New Idea   ",
+      summary: "  Summary text  ",
+      tags: ["design"],
+      idFactory: () => "idea-123",
+      createdAt: "2025-01-01T00:00:00.000Z",
+      updatedAt: "2025-01-02T00:00:00.000Z",
+    });
+
+    expect(idea).toEqual({
+      id: "idea-123",
+      title: "   New Idea   ",
+      summary: "Summary text",
+      tags: ["design"],
+      isPinned: false,
+      isArchived: false,
+      features: [],
+      createdAt: "2025-01-01T00:00:00.000Z",
+      updatedAt: "2025-01-02T00:00:00.000Z",
+    });
+  });
+});
+
+describe("mergeFeatureBodies", () => {
+  const baseFeatures = [
+    { id: "feature-1", content: "Prototype", createdAt: "2025-01-01T00:00:00.000Z" },
+    { id: "feature-2", content: "User testing", createdAt: "2025-01-02T00:00:00.000Z" },
+  ];
+
+  it("updates existing entries and appends new ones while preserving metadata", () => {
+    let counter = 0;
+    const idFactory = () => {
+      counter += 1;
+      return `feature-new-${counter}`;
+    };
+
+    const result = mergeFeatureBodies(baseFeatures, [" Prototype plan  ", "User testing", "Launch"], {
+      timestamp: "2025-02-01T00:00:00.000Z",
+      idFactory,
+    });
+
+    expect(result).toEqual([
+      { id: "feature-1", content: "Prototype plan", createdAt: "2025-01-01T00:00:00.000Z" },
+      { id: "feature-2", content: "User testing", createdAt: "2025-01-02T00:00:00.000Z" },
+      { id: "feature-new-1", content: "Launch", createdAt: "2025-02-01T00:00:00.000Z" },
+    ]);
+  });
+
+  it("drops empty entries and returns empty array when everything removed", () => {
+    const result = mergeFeatureBodies(baseFeatures, ["   ", ""], { timestamp: "2025-02-01T00:00:00.000Z" });
+    expect(result).toEqual([]);
+  });
+
+  it("does not mutate the original features array", () => {
+    const snapshot = JSON.parse(JSON.stringify(baseFeatures));
+    mergeFeatureBodies(baseFeatures, ["Prototype"], { timestamp: "2025-02-01T00:00:00.000Z" });
+    expect(baseFeatures).toEqual(snapshot);
   });
 });
 

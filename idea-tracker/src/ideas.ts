@@ -61,6 +61,32 @@ export function createFeaturesFromText(block?: string, options: FeatureOptions =
     }));
 }
 
+export function mergeFeatureBodies(
+  existingFeatures: IdeaFeature[],
+  featureBodies: string[],
+  options: FeatureOptions = {},
+): IdeaFeature[] {
+  const trimmedBodies = featureBodies.map((body) => body.trim()).filter(Boolean);
+  if (trimmedBodies.length === 0) {
+    return [];
+  }
+
+  const timestamp = options.timestamp ?? new Date().toISOString();
+  const makeId = options.idFactory ?? randomUUID;
+
+  return trimmedBodies.map((content, index) => {
+    const existing = existingFeatures[index];
+    if (existing) {
+      return { ...existing, content };
+    }
+    return {
+      id: makeId(),
+      content,
+      createdAt: timestamp,
+    };
+  });
+}
+
 export function parseTagsInput(input?: string): string[] {
   if (!input) {
     return [];

@@ -5,7 +5,7 @@
   "description": "Capture project ideas, append feature bullets in seconds, and export the latest thinking as Markdown without leaving Raycast.",
   "icon": "extension-icon.png",
   "author": "mwielondek",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "platforms": [
     "macOS",
     "Windows"
@@ -43,6 +43,7 @@
   },
   "devDependencies": {
     "@raycast/eslint-config": "^2.0.4",
+    "@rollup/rollup-darwin-x64": "^4.52.5",
     "@types/node": "^22.13.10",
     "@types/react": "^19.0.10",
     "eslint": "^9.22.0",

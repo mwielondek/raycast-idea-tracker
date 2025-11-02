@@ -89,5 +89,5 @@ export default function AppendFeatureCommand() {
     );
   }
 
-  return <AppendFeatureForm projects={activeProjects} onSubmit={handleAppend} />;
+  return <AppendFeatureForm projects={activeProjects} onSubmit={handleAppend} rememberLastProject />;
 }

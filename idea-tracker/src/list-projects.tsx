@@ -13,8 +13,8 @@ import {
   showToast,
   useNavigation,
 } from "@raycast/api";
-import { useLocalStorage } from "@raycast/utils";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useForm, useLocalStorage } from "@raycast/utils";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   IDEAS_STORAGE_KEY,
   Idea,
@@ -24,9 +24,11 @@ import {
   formatIdeaMarkdown,
   formatIdeasMarkdown,
   parseTagsInput,
+  mergeFeatureBodies,
 } from "./ideas";
 
 const TAG_COLORS = ["#A5B4FC", "#C4B5FD", "#FDBA8C", "#FBCFE8", "#BFDBFE", "#FDE68A", "#F5D0FE", "#C7D2FE"] as const;
+const LAST_PROJECT_STORAGE_KEY = "raycast-idea-tracker/append-feature-last-project";
 
 export type ProjectFormValues = {
   title: string;
@@ -205,7 +207,7 @@ export default function ListProjectsCommand() {
     return updatedProject ? normalizeProject(updatedProject) : null;
   }
 
-  async function handleEditFeatures(projectId: string, featuresText: string): Promise<Idea | null> {
+  async function handleEditFeatures(projectId: string, featureBodies: string[]): Promise<Idea | null> {
     const existing = storedProjects ?? [];
     const project = existing.find((item) => item.id === projectId);
     if (!project) {
@@ -219,7 +221,10 @@ export default function ListProjectsCommand() {
     }
 
     const now = new Date().toISOString();
-    const updatedFeatures = createFeaturesFromText(featuresText, { timestamp: now });
+    const updatedFeatures = mergeFeatureBodies(project.features, featureBodies, { timestamp: now });
+    const hasChanges =
+      updatedFeatures.length !== project.features.length ||
+      updatedFeatures.some((feature, index) => project.features[index]?.content !== feature.content);
     const updatedProjects = existing.map((item) => {
       if (item.id !== projectId) {
         return item;
@@ -227,7 +232,7 @@ export default function ListProjectsCommand() {
       return {
         ...item,
         features: updatedFeatures,
-        updatedAt: now,
+        updatedAt: hasChanges ? now : item.updatedAt,
       };
     });
 
@@ -429,7 +434,7 @@ type AppendFeatureHandler = (projectId: string, feature: string) => Promise<Idea
 
 type UpdateProjectHandler = (projectId: string, values: ProjectFormValues) => Promise<Idea | null>;
 
-type EditFeaturesHandler = (projectId: string, featuresText: string) => Promise<Idea | null>;
+type EditFeaturesHandler = (projectId: string, featureBodies: string[]) => Promise<Idea | null>;
 
 type ProjectListItemProps = {
   project: Idea;
@@ -557,8 +562,8 @@ function ProjectActions({
           target={
             <EditFeaturesForm
               project={project}
-              onSubmit={async (text) => {
-                const result = await onEditFeatures(project.id, text);
+              onSubmit={async (featureBodies) => {
+                const result = await onEditFeatures(project.id, featureBodies);
                 return result !== null;
               }}
             />
@@ -682,34 +687,78 @@ function EditFeaturesForm({
   onSubmit,
 }: {
   project: Idea;
-  onSubmit: (featuresText: string) => Promise<boolean>;
+  onSubmit: (featureBodies: string[]) => Promise<boolean>;
 }) {
   const { pop } = useNavigation();
+  const initialFeatureBodies = useMemo(
+    () => (project.features.length > 0 ? project.features.map((feature) => feature.content) : [""]),
+    [project.features],
+  );
+  const [featureInputs, setFeatureInputs] = useState<string[]>(initialFeatureBodies);
+
+  useEffect(() => {
+    setFeatureInputs(initialFeatureBodies);
+  }, [initialFeatureBodies]);
+
+  function handleFeatureChange(index: number, value: string) {
+    setFeatureInputs((prev) => {
+      const next = [...prev];
+      next[index] = value;
+      return next;
+    });
+  }
+
+  function handleAddField() {
+    setFeatureInputs((prev) => [...prev, ""]);
+  }
+
+  function handleResetFields() {
+    setFeatureInputs(initialFeatureBodies);
+  }
+
+  async function handleSubmit() {
+    const success = await onSubmit(featureInputs);
+    if (success) {
+      pop();
+    }
+  }
 
   return (
     <Form
       navigationTitle={`Edit Features • ${project.title}`}
       actions={
         <ActionPanel>
-          <Action.SubmitForm
-            title="Save Features"
-            onSubmit={async (values: { features?: string }) => {
-              const success = await onSubmit(values.features ?? "");
-              if (success) {
-                pop();
-              }
-            }}
-          />
+          <ActionPanel.Section>
+            <Action.SubmitForm title="Save Features" onSubmit={handleSubmit} />
+            <Action
+              title="Add Feature Field"
+              icon={Icon.PlusCircle}
+              shortcut={{ modifiers: ["cmd", "shift"], key: "n" }}
+              onAction={handleAddField}
+            />
+            <Action
+              title="Reset Changes"
+              icon={Icon.ArrowCounterClockwise}
+              shortcut={{ modifiers: ["cmd", "shift"], key: "r" }}
+              onAction={handleResetFields}
+            />
+          </ActionPanel.Section>
         </ActionPanel>
       }
     >
-      <Form.TextArea
-        id="features"
-        title="Features"
-        defaultValue={project.features.map((feature) => feature.content).join("\n")}
-        placeholder="Each new line becomes its own bullet."
-        autoFocus
-      />
+      <Form.Description text="Update each feature individually. Leave a field blank to remove it when saving." />
+      {featureInputs.map((value, index) => (
+        <Form.TextArea
+          key={`feature-${index}`}
+          id={`feature-${index}`}
+          title={`Feature ${index + 1}`}
+          placeholder="Describe the feature."
+          value={value}
+          autoFocus={index === 0}
+          info="Leave empty to remove this feature."
+          onChange={(text) => handleFeatureChange(index, text)}
+        />
+      ))}
     </Form>
   );
 }
@@ -720,6 +769,7 @@ type AppendFeatureFormProps = {
   projects?: Idea[];
   onSubmit: (values: AppendFeatureValues) => Promise<boolean>;
   closeOnSuccess?: boolean;
+  rememberLastProject?: boolean;
 };
 
 export function AppendFeatureForm({
@@ -728,71 +778,131 @@ export function AppendFeatureForm({
   projects,
   onSubmit,
   closeOnSuccess = false,
+  rememberLastProject = false,
 }: AppendFeatureFormProps) {
   const { pop } = useNavigation();
-  const pickableProjects = (projects ?? []).map(normalizeProject);
-  const [selectedProjectId, setSelectedProjectId] = useState(projectId ?? "");
-  const [featureText, setFeatureText] = useState("");
+  const pickableProjects = useMemo(() => (projects ?? []).map(normalizeProject), [projects]);
+  const { value: storedProjectPreference, setValue: setStoredProjectPreference } = useLocalStorage<string | undefined>(
+    LAST_PROJECT_STORAGE_KEY,
+    undefined,
+  );
+  const initialProjectSelection = useMemo(() => {
+    if (projectId) {
+      return projectId;
+    }
+    if (rememberLastProject && storedProjectPreference) {
+      const exists = pickableProjects.some((item) => item.id === storedProjectPreference);
+      if (exists) {
+        return storedProjectPreference;
+      }
+    }
+    return "";
+  }, [projectId, rememberLastProject, storedProjectPreference, pickableProjects]);
 
-  const projectPickerRef = useRef<Form.Dropdown>(null);
-  const featureRef = useRef<Form.TextArea>(null);
+  const {
+    handleSubmit: handleFormSubmit,
+    itemProps,
+    setValue,
+    values,
+    focus,
+  } = useForm<AppendFeatureValues>({
+    initialValues: {
+      projectId: initialProjectSelection,
+      feature: "",
+    },
+    onSubmit: async (formValues) => {
+      const effectiveProjectId = projectId ?? formValues.projectId;
+      if (!effectiveProjectId) {
+        await showToast(Toast.Style.Failure, "Select a project");
+        focus("projectId");
+        return;
+      }
+
+      const trimmedFeature = formValues.feature.trim();
+      if (!trimmedFeature) {
+        await showToast(Toast.Style.Failure, "Describe the feature");
+        focus("feature");
+        return;
+      }
+
+      const success = await onSubmit({ projectId: effectiveProjectId, feature: trimmedFeature });
+      if (!success) {
+        return;
+      }
+
+      setValue("feature", "");
+      if (!projectId) {
+        if (rememberLastProject) {
+          void setStoredProjectPreference(effectiveProjectId);
+        } else {
+          setValue("projectId", "");
+        }
+      }
+      setTimeout(() => focus("feature"), 0);
+      if (closeOnSuccess) {
+        pop();
+      }
+    },
+  });
+
+  useEffect(() => {
+    if (projectId) {
+      setValue("projectId", projectId);
+      setTimeout(() => focus("feature"), 0);
+    }
+  }, [projectId, setValue, focus]);
+
+  useEffect(() => {
+    if (!projectId && rememberLastProject && storedProjectPreference) {
+      const exists = pickableProjects.some((project) => project.id === storedProjectPreference);
+      if (exists && values.projectId !== storedProjectPreference) {
+        setValue("projectId", storedProjectPreference);
+      } else if (!exists) {
+        void setStoredProjectPreference(undefined);
+      }
+    }
+  }, [
+    projectId,
+    rememberLastProject,
+    storedProjectPreference,
+    pickableProjects,
+    setValue,
+    values.projectId,
+    setStoredProjectPreference,
+  ]);
 
   useEffect(() => {
     const timer = setTimeout(() => {
       if (projectId) {
-        featureRef.current?.focus();
+        focus("feature");
       } else {
-        projectPickerRef.current?.focus();
+        focus("projectId");
       }
     }, 0);
     return () => clearTimeout(timer);
-  }, [projectId]);
-
-  async function handleSubmit() {
-    const effectiveProjectId = projectId ?? selectedProjectId;
-    if (!effectiveProjectId) {
-      await showToast(Toast.Style.Failure, "Select a project");
-      projectPickerRef.current?.focus();
-      return;
-    }
-
-    const trimmedFeature = featureText.trim();
-    if (!trimmedFeature) {
-      await showToast(Toast.Style.Failure, "Describe the feature");
-      featureRef.current?.focus();
-      return;
-    }
-
-    const success = await onSubmit({ projectId: effectiveProjectId, feature: trimmedFeature });
-    if (success) {
-      setFeatureText("");
-      if (!projectId) {
-        setSelectedProjectId("");
-        setTimeout(() => projectPickerRef.current?.focus(), 0);
-      }
-      if (closeOnSuccess) {
-        pop();
-      }
-    }
-  }
+  }, [projectId, focus]);
 
   return (
     <Form
       navigationTitle={navigationTitle}
       actions={
         <ActionPanel>
-          <Action.SubmitForm title="Add Feature" onSubmit={handleSubmit} />
+          <Action.SubmitForm title="Add Feature" onSubmit={handleFormSubmit} />
         </ActionPanel>
       }
     >
       {!projectId && pickableProjects.length > 0 && (
         <Form.Dropdown
-          ref={projectPickerRef}
-          id="projectId"
+          {...itemProps.projectId}
           title="Project"
-          value={selectedProjectId}
           autoFocus
-          onChange={(value) => setSelectedProjectId(value)}
+          storeValue={rememberLastProject}
+          onChange={(value) => {
+            itemProps.projectId?.onChange?.(value);
+            if (rememberLastProject) {
+              void setStoredProjectPreference(value);
+            }
+          }}
         >
           {pickableProjects.map((project) => (
             <Form.Dropdown.Item
@@ -805,12 +915,9 @@ export function AppendFeatureForm({
         </Form.Dropdown>
       )}
       <Form.TextArea
-        ref={featureRef}
-        id="feature"
+        {...itemProps.feature}
         title="Feature Idea"
         placeholder="Describe the feature. Each new line becomes its own bullet."
-        value={featureText}
-        onChange={setFeatureText}
       />
     </Form>
   );
