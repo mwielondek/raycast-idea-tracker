@@ -30,8 +30,8 @@ export default function AppendFeatureCommand() {
     }
 
     const now = new Date().toISOString();
-    const [feature] = createFeaturesFromText(trimmed, { timestamp: now });
-    if (!feature) {
+    const features = createFeaturesFromText(trimmed, { timestamp: now });
+    if (features.length === 0) {
       await showToast(Toast.Style.Failure, "Feature text cannot be empty");
       return false;
     }
@@ -43,7 +43,7 @@ export default function AppendFeatureCommand() {
 
       return {
         ...item,
-        features: [...item.features, feature],
+        features: [...item.features, ...features],
         updatedAt: now,
       };
     });

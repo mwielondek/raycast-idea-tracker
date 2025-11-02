@@ -162,8 +162,8 @@ export default function ListProjectsCommand() {
     }
 
     const now = new Date().toISOString();
-    const [nextFeature] = createFeaturesFromText(trimmed, { timestamp: now });
-    if (!nextFeature) {
+    const newFeatures = createFeaturesFromText(trimmed, { timestamp: now });
+    if (newFeatures.length === 0) {
       return false;
     }
 
@@ -174,7 +174,7 @@ export default function ListProjectsCommand() {
 
       return {
         ...item,
-        features: [...item.features, nextFeature],
+        features: [...item.features, ...newFeatures],
         updatedAt: now,
       };
     });
@@ -273,7 +273,7 @@ export default function ListProjectsCommand() {
       ) : (
         <>
           {filteredProjects.pinned.length > 0 && (
-            <List.Section title="★ Pinned Projects" subtitle={`${filteredProjects.pinned.length}`}>
+            <List.Section title="Pinned Projects" subtitle={`${filteredProjects.pinned.length}`}>
               {filteredProjects.pinned.map((project) => (
                 <ProjectListItem
                   key={project.id}
@@ -317,7 +317,7 @@ export default function ListProjectsCommand() {
           </List.Section>
 
           {filteredProjects.archived.length > 0 && (
-            <List.Section title="📁 Archived Projects" subtitle={`${filteredProjects.archived.length}`}>
+            <List.Section title="Archived Projects" subtitle={`${filteredProjects.archived.length}`}>
               {filteredProjects.archived.map((project) => (
                 <ProjectListItem
                   key={project.id}
@@ -553,11 +553,16 @@ function ProjectDetail(props: {
   onToggleArchive: (projectId: string, archive: boolean) => Promise<void>;
 }) {
   const { project, allProjects, onAppendFeature, onDelete, onCreateProject, onUpdateProject, onTogglePin, onToggleArchive } = props;
+  const { value: storedProjects } = useLocalStorage<Idea[]>(IDEAS_STORAGE_KEY, []);
+  const latestProject = useMemo(() => {
+    const normalized = (storedProjects ?? []).map(normalizeProject);
+    return normalized.find((item) => item.id === project.id) ?? project;
+  }, [storedProjects, project]);
 
   return (
     <Detail
-      navigationTitle={project.title}
-      markdown={formatIdeaMarkdown(project)}
+      navigationTitle={latestProject.title}
+      markdown={formatIdeaMarkdown(latestProject)}
       actions={
         <ActionPanel>
           <Action.Push
@@ -565,8 +570,8 @@ function ProjectDetail(props: {
             icon={Icon.PlusCircle}
             target={
               <InlineAppendFeatureForm
-                projectId={project.id}
-                projectTitle={project.title}
+                projectId={latestProject.id}
+                projectTitle={latestProject.title}
                 onSubmit={onAppendFeature}
               />
             }
@@ -575,43 +580,43 @@ function ProjectDetail(props: {
             title="Edit Project"
             icon={Icon.Pencil}
             shortcut={{ modifiers: ["cmd"], key: "e" }}
-            target={<EditProjectForm project={project} onSubmit={(values) => onUpdateProject(project.id, values)} />}
+            target={<EditProjectForm project={latestProject} onSubmit={(values) => onUpdateProject(latestProject.id, values)} />}
           />
-          {project.isPinned ? (
+          {latestProject.isPinned ? (
             <Action
               title="Unpin Project"
               icon={Icon.Star}
               shortcut={{ modifiers: ["cmd"], key: "p" }}
-              onAction={() => onTogglePin(project.id, false)}
+              onAction={() => onTogglePin(latestProject.id, false)}
             />
           ) : (
             <Action
               title="Pin Project"
               icon={Icon.Star}
               shortcut={{ modifiers: ["cmd"], key: "p" }}
-              onAction={() => onTogglePin(project.id, true)}
+              onAction={() => onTogglePin(latestProject.id, true)}
             />
           )}
-          {project.isArchived ? (
+          {latestProject.isArchived ? (
             <Action
               title="Restore Project"
               icon={Icon.Folder}
               shortcut={{ modifiers: ["cmd", "shift"], key: "a" }}
-              onAction={() => onToggleArchive(project.id, false)}
+              onAction={() => onToggleArchive(latestProject.id, false)}
             />
           ) : (
             <Action
               title="Archive Project"
               icon={Icon.Folder}
               shortcut={{ modifiers: ["cmd", "shift"], key: "a" }}
-              onAction={() => onToggleArchive(project.id, true)}
+              onAction={() => onToggleArchive(latestProject.id, true)}
             />
           )}
           <Action
             title="Copy Project as Markdown"
             icon={Icon.Clipboard}
             onAction={async () => {
-              await Clipboard.copy(formatIdeaMarkdown(project));
+              await Clipboard.copy(formatIdeaMarkdown(latestProject));
               await showHUD("Copied project");
             }}
           />
@@ -620,7 +625,7 @@ function ProjectDetail(props: {
             icon={Icon.Trash}
             style={Action.Style.Destructive}
             shortcut={{ modifiers: ["ctrl"], key: "x" }}
-            onAction={() => onDelete(project.id)}
+            onAction={() => onDelete(latestProject.id)}
           />
         </ActionPanel>
       }
@@ -708,12 +713,12 @@ function ProjectForm({
         defaultValue={initialValues.tags}
       />
       {includeInitialFeatures && (
-        <Form.TextArea
-          id="initialFeatures"
-          title="Initial Features"
-          placeholder="Each line becomes a feature bullet"
-          defaultValue={initialValues.initialFeatures}
-        />
+      <Form.TextArea
+        id="initialFeatures"
+        title="Initial Features"
+        placeholder="Seed features here. Each new line becomes a separate bullet."
+        defaultValue={initialValues.initialFeatures}
+      />
       )}
     </Form>
   );
@@ -765,6 +770,12 @@ export function AppendFeatureForm({
     }
   }, [projectId, availableProjects.length, focus]);
 
+  useEffect(() => {
+    if (projectId) {
+      focus("feature");
+    }
+  }, [projectId, focus]);
+
   return (
     <Form
       navigationTitle={navigationTitle}
@@ -778,8 +789,8 @@ export function AppendFeatureForm({
           {!projectId && availableProjects.length > 0 && (
             <Action
               title="Focus Project Picker"
-              icon={Icon.CommandSymbol}
-              shortcut={{ modifiers: ["cmd"], key: "p" }}
+              icon={Icon.ArrowDown}
+              shortcut={{ modifiers: ["opt"], key: "p" }}
               onAction={() => focus("projectId")}
             />
           )}
@@ -812,7 +823,7 @@ export function AppendFeatureForm({
       )}
       <Form.TextArea
         title="Feature Idea"
-        placeholder="Outline the feature or enhancement to append"
+        placeholder="Describe the feature. Each new line becomes its own bullet."
         {...itemProps.feature}
         autoFocus
       />
