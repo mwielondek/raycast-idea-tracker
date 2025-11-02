@@ -14,8 +14,8 @@ import {
   showToast,
   useNavigation,
 } from "@raycast/api";
-import { useLocalStorage, useForm } from "@raycast/utils";
-import { useEffect, useMemo, useState } from "react";
+import { useLocalStorage } from "@raycast/utils";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   IDEAS_STORAGE_KEY,
   Idea,
@@ -552,21 +552,49 @@ function InlineAppendFeatureForm(props: {
   onSuccess?: (project: Idea) => void;
 }) {
   const { projectId, projectTitle, onSubmit, onSuccess } = props;
+  const { pop } = useNavigation();
+  const featureRef = useRef<Form.TextArea>(null);
+  const [featureText, setFeatureText] = useState("");
+
+  useEffect(() => {
+    const timer = setTimeout(() => featureRef.current?.focus(), 0);
+    return () => clearTimeout(timer);
+  }, []);
+
+  async function handleSubmit() {
+    const trimmed = featureText.trim();
+    if (!trimmed) {
+      await showToast(Toast.Style.Failure, "Describe the feature");
+      featureRef.current?.focus();
+      return;
+    }
+
+    const result = await onSubmit(projectId, trimmed);
+    if (result) {
+      setFeatureText("");
+      onSuccess?.(result);
+      pop();
+    }
+  }
 
   return (
-    <AppendFeatureForm
+    <Form
       navigationTitle={`Append Feature • ${projectTitle}`}
-      projectId={projectId}
-      closeOnSuccess
-      onSubmit={async (values) => {
-        const result = await onSubmit(values.projectId, values.feature);
-        if (result) {
-          onSuccess?.(result);
-          return true;
-        }
-        return false;
-      }}
-    />
+      actions={
+        <ActionPanel>
+          <Action.SubmitForm title="Add Feature" onSubmit={handleSubmit} />
+        </ActionPanel>
+      }
+    >
+      <Form.TextArea
+        ref={featureRef}
+        id="feature"
+        title="Feature Idea"
+        placeholder="Describe the feature. Each new line becomes its own bullet."
+        value={featureText}
+        onChange={setFeatureText}
+      />
+    </Form>
   );
 }
 
@@ -770,102 +798,6 @@ function ProjectForm({
   );
 }
 
-type AppendFeatureFormProps = {
-  navigationTitle?: string;
-  projectId?: string;
-  projects?: Idea[];
-  onSubmit: (values: AppendFeatureValues) => Promise<boolean>;
-  closeOnSuccess?: boolean;
-};
-
-export function AppendFeatureForm({
-  navigationTitle = "Append Feature",
-  projectId,
-  projects,
-  onSubmit,
-  closeOnSuccess = false,
-}: AppendFeatureFormProps) {
-  const { pop } = useNavigation();
-  const availableProjects = (projects ?? []).map(normalizeProject);
-  const initialProjectId: string | undefined = projectId ?? undefined;
-
-  const form = useForm<AppendFeatureValues>({
-    initialValues: initialProjectId ? { projectId: initialProjectId, feature: "" } : { feature: "" } as any,
-    onSubmit: async (values) => {
-      const targetProjectId = projectId ?? values.projectId;
-      if (!targetProjectId) {
-        await showToast(Toast.Style.Failure, "Select a project");
-        return false;
-      }
-      const success = await onSubmit({ projectId: targetProjectId, feature: values.feature });
-      if (success && closeOnSuccess) {
-        pop();
-      }
-      return success;
-    },
-  });
-
-  const { itemProps, handleSubmit, focus, setValue } = form;
-
-  useEffect(() => {
-    if (!projectId && availableProjects.length > 0) {
-      focus("projectId");
-    }
-  }, [projectId, availableProjects.length, focus]);
-
-  useEffect(() => {
-    if (projectId) {
-      focus("feature");
-    }
-  }, [projectId, focus]);
-
-  return (
-    <Form
-      navigationTitle={navigationTitle}
-      actions={
-        <ActionPanel>
-          <Action.SubmitForm title="Add Feature" onSubmit={handleSubmit} />
-          {!projectId && availableProjects.length > 0 && (
-            <Action
-              title="Focus Project Picker"
-              icon={Icon.ArrowDown}
-              shortcut={{ modifiers: ["opt"], key: "p" }}
-              onAction={() => focus("projectId")}
-            />
-          )}
-        </ActionPanel>
-      }
-    >
-      {!projectId && availableProjects.length > 0 && (
-        <Form.Dropdown
-          title="Project"
-          {...itemProps.projectId}
-          onChange={(value) => {
-            setValue("projectId", value);
-            if (value) {
-              focus("feature");
-            }
-          }}
-        >
-          {availableProjects.map((project) => (
-            <Form.Dropdown.Item
-              key={project.id}
-              value={project.id}
-              title={project.title}
-              icon={project.isPinned ? Icon.Star : project.isArchived ? Icon.Folder : Icon.Circle}
-            />
-          ))}
-        </Form.Dropdown>
-      )}
-      <Form.TextArea
-        title="Feature Idea"
-        placeholder="Describe the feature. Each new line becomes its own bullet."
-        {...itemProps.feature}
-        autoFocus={Boolean(projectId)}
-      />
-    </Form>
-  );
-}
 
 function normalizeProject(project: StoredProject): Idea {
   return {

@@ -1,7 +1,8 @@
-import { Action, ActionPanel, Detail, Icon, LaunchType, Toast, launchCommand, showToast } from "@raycast/api";
+import { Action, ActionPanel, Detail, Form, Icon, LaunchType, Toast, launchCommand, showToast } from "@raycast/api";
 import { useLocalStorage } from "@raycast/utils";
+import { useEffect, useRef, useState } from "react";
 import { IDEAS_STORAGE_KEY, Idea, createFeaturesFromText } from "./ideas";
-import { AppendFeatureForm, AppendFeatureValues } from "./list-projects";
+import { AppendFeatureValues } from "./list-projects";
 
 export default function AppendFeatureCommand() {
   const {
@@ -93,5 +94,95 @@ export default function AppendFeatureCommand() {
     );
   }
 
-  return <AppendFeatureForm projects={activeProjects} onSubmit={handleAppend} />;
+  return <StandaloneAppendFeatureForm projects={activeProjects} onSubmit={handleAppend} />;
+}
+
+function StandaloneAppendFeatureForm(props: {
+  projects: Idea[];
+  onSubmit: (values: AppendFeatureValues) => Promise<boolean>;
+}) {
+  const { projects, onSubmit } = props;
+  const [selectedProjectId, setSelectedProjectId] = useState<string | undefined>(undefined);
+  const [featureText, setFeatureText] = useState<string>("");
+
+  const projectPickerRef = useRef<Form.Dropdown>(null);
+  const featureRef = useRef<Form.TextArea>(null);
+
+  useEffect(() => {
+    const timer = setTimeout(() => projectPickerRef.current?.focus(), 0);
+    return () => clearTimeout(timer);
+  }, []);
+
+  async function handleSubmit() {
+    if (!selectedProjectId) {
+      await showToast(Toast.Style.Failure, "Select a project");
+      projectPickerRef.current?.focus();
+      return;
+    }
+
+    const trimmedFeature = featureText.trim();
+    if (!trimmedFeature) {
+      await showToast(Toast.Style.Failure, "Describe the feature");
+      featureRef.current?.focus();
+      return;
+    }
+
+    const success = await onSubmit({ projectId: selectedProjectId, feature: trimmedFeature });
+    if (success) {
+      setFeatureText("");
+      setSelectedProjectId(undefined);
+      setTimeout(() => projectPickerRef.current?.focus(), 0);
+    }
+  }
+
+  const normalizedProjects = projects.map((project) => normalizeIdea(project));
+
+  return (
+    <Form
+      navigationTitle="Append Feature"
+      actions={
+        <ActionPanel>
+          <Action.SubmitForm title="Add Feature" onSubmit={handleSubmit} />
+        </ActionPanel>
+      }
+    >
+      <Form.Dropdown
+        ref={projectPickerRef}
+        id="projectId"
+        title="Project"
+        value={selectedProjectId}
+        autoFocus
+        onChange={(value) => {
+          setSelectedProjectId(value);
+        }}
+      >
+        {normalizedProjects.map((project) => (
+          <Form.Dropdown.Item
+            key={project.id}
+            value={project.id}
+            title={project.title}
+            icon={project.isPinned ? Icon.Star : project.isArchived ? Icon.Folder : Icon.Circle}
+          />
+        ))}
+      </Form.Dropdown>
+      <Form.TextArea
+        ref={featureRef}
+        id="feature"
+        title="Feature Idea"
+        placeholder="Describe the feature. Each new line becomes its own bullet."
+        value={featureText}
+        onChange={setFeatureText}
+      />
+    </Form>
+  );
+}
+
+function normalizeIdea(project: Idea): Idea {
+  return {
+    ...project,
+    tags: project.tags ?? [],
+    features: project.features ?? [],
+    isPinned: project.isPinned ?? false,
+    isArchived: project.isArchived ?? false,
+  };
 }
