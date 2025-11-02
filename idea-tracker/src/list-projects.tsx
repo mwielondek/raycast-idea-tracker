@@ -114,11 +114,11 @@ export default function ListProjectsCommand() {
     }
   }
 
-  async function handleUpdateProject(projectId: string, values: ProjectFormValues): Promise<boolean> {
+  async function handleUpdateProject(projectId: string, values: ProjectFormValues): Promise<Idea | null> {
     const title = values.title?.trim();
     if (!title) {
       await showToast(Toast.Style.Failure, "Project name is required");
-      return false;
+      return null;
     }
 
     const tags = parseTagsInput(values.tags);
@@ -139,7 +139,8 @@ export default function ListProjectsCommand() {
 
     await setProjects(updated);
     await showToast(Toast.Style.Success, "Project updated");
-    return true;
+    const updatedProject = updated.find((project) => project.id === projectId);
+    return updatedProject ? normalizeProject(updatedProject) : null;
   }
 
   async function handleAppendFeature(projectId: string, featureText: string): Promise<Idea | null> {
@@ -342,13 +343,15 @@ export default function ListProjectsCommand() {
 
 type AppendFeatureHandler = (projectId: string, feature: string) => Promise<Idea | null>;
 
+type UpdateProjectHandler = (projectId: string, values: ProjectFormValues) => Promise<Idea | null>;
+
 type ProjectListItemProps = {
   project: Idea;
   allProjects: Idea[];
   onAppendFeature: AppendFeatureHandler;
   onDelete: (projectId: string) => Promise<void>;
   onCreateProject: (values: ProjectFormValues) => Promise<boolean>;
-  onUpdateProject: (projectId: string, values: ProjectFormValues) => Promise<boolean>;
+  onUpdateProject: UpdateProjectHandler;
   onTogglePin: (projectId: string, pin: boolean) => Promise<void>;
   onToggleArchive: (projectId: string, archive: boolean) => Promise<void>;
 };
@@ -401,7 +404,7 @@ type ProjectActionsProps = {
   onAppendFeature: AppendFeatureHandler;
   onDelete: (projectId: string) => Promise<void>;
   onCreateProject: (values: ProjectFormValues) => Promise<boolean>;
-  onUpdateProject: (projectId: string, values: ProjectFormValues) => Promise<boolean>;
+  onUpdateProject: UpdateProjectHandler;
   onTogglePin: (projectId: string, pin: boolean) => Promise<void>;
   onToggleArchive: (projectId: string, archive: boolean) => Promise<void>;
 };
@@ -451,7 +454,15 @@ function ProjectActions({
           title="Edit Project"
           icon={Icon.Pencil}
           shortcut={{ modifiers: ["cmd"], key: "e" }}
-          target={<EditProjectForm project={project} onSubmit={(values) => onUpdateProject(project.id, values)} />}
+          target={
+            <EditProjectForm
+              project={project}
+              onSubmit={async (values) => {
+                const result = await onUpdateProject(project.id, values);
+                return result !== null;
+              }}
+            />
+          }
         />
         {project.isPinned ? (
           <Action
@@ -559,7 +570,7 @@ function ProjectDetail(props: {
   onAppendFeature: AppendFeatureHandler;
   onDelete: (projectId: string) => Promise<void>;
   onCreateProject: (values: ProjectFormValues) => Promise<boolean>;
-  onUpdateProject: (projectId: string, values: ProjectFormValues) => Promise<boolean>;
+  onUpdateProject: UpdateProjectHandler;
   onTogglePin: (projectId: string, pin: boolean) => Promise<void>;
   onToggleArchive: (projectId: string, archive: boolean) => Promise<void>;
 }) {
@@ -597,7 +608,19 @@ function ProjectDetail(props: {
             title="Edit Project"
             icon={Icon.Pencil}
             shortcut={{ modifiers: ["cmd"], key: "e" }}
-            target={<EditProjectForm project={displayProject} onSubmit={(values) => onUpdateProject(displayProject.id, values)} />}
+            target={
+              <EditProjectForm
+                project={displayProject}
+                onSubmit={async (values) => {
+                  const result = await onUpdateProject(displayProject.id, values);
+                  if (result) {
+                    setDisplayProject(result);
+                    return true;
+                  }
+                  return false;
+                }}
+              />
+            }
           />
           {displayProject.isPinned ? (
             <Action
