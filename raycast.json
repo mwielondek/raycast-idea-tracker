@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "name": "Raycast Idea Tracker",
+  "title": "Idea Tracker",
+  "description": "Capture ideas and append feature notes in seconds.",
+  "icon": "list-clipboard",
+  "author": "Milo Wielondek",
+  "commands": [
+    {
+      "name": "index",
+      "title": "Open Idea Tracker",
+      "subtitle": "Ideas",
+      "description": "Browse, edit, and export your ideas.",
+      "mode": "view"
+    }
+  ]
+}
