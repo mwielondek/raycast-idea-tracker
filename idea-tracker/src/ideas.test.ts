@@ -1,11 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  Idea,
-  createFeaturesFromText,
-  formatIdeaMarkdown,
-  formatIdeasMarkdown,
-  parseTagsInput,
-} from "./ideas";
+import { Idea, createFeaturesFromText, formatIdeaMarkdown, formatIdeasMarkdown, parseTagsInput } from "./ideas";
 
 describe("createFeaturesFromText", () => {
   it("returns an empty array when no content provided", () => {
@@ -51,9 +45,7 @@ describe("formatIdeaMarkdown", () => {
       updatedAt: "2025-01-02T12:00:00.000Z",
     };
 
-    expect(
-      formatIdeaMarkdown(idea, { formatDate: stubFormatDate })
-    ).toBe(
+    expect(formatIdeaMarkdown(idea, { formatDate: stubFormatDate })).toBe(
       [
         "# Launch Companion App",
         "",
@@ -70,7 +62,7 @@ describe("formatIdeaMarkdown", () => {
         "",
         "- Realtime sync",
         "- Push notifications",
-      ].join("\n")
+      ].join("\n"),
     );
   });
 
@@ -97,7 +89,7 @@ describe("formatIdeaMarkdown", () => {
         "- Updated: formatted-2025-01-01T00:00:00.000Z",
         "",
         "_No features captured yet._",
-      ].join("\n")
+      ].join("\n"),
     );
   });
 });
@@ -154,7 +146,7 @@ describe("formatIdeasMarkdown", () => {
         "- Updated: 2025-01-02T00:00:00.000Z",
         "",
         "_No features captured yet._",
-      ].join("\n")
+      ].join("\n"),
     );
   });
 

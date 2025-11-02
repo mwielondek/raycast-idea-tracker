@@ -1,20 +1,10 @@
 import { Detail, Toast, showToast } from "@raycast/api";
 import { useLocalStorage } from "@raycast/utils";
-import {
-  IDEAS_STORAGE_KEY,
-  Idea,
-  createFeaturesFromText,
-  createIdea,
-  parseTagsInput,
-} from "./ideas";
+import { IDEAS_STORAGE_KEY, Idea, createFeaturesFromText, createIdea, parseTagsInput } from "./ideas";
 import { AddProjectForm, ProjectFormValues } from "./list-projects";
 
 export default function AddProjectCommand() {
-  const {
-    value: storedProjects,
-    setValue: setProjects,
-    isLoading,
-  } = useLocalStorage<Idea[]>(IDEAS_STORAGE_KEY, []);
+  const { value: storedProjects, setValue: setProjects, isLoading } = useLocalStorage<Idea[]>(IDEAS_STORAGE_KEY, []);
 
   async function handleSubmit(values: ProjectFormValues): Promise<boolean> {
     const title = values.title?.trim();
