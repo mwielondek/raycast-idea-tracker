@@ -1,11 +1,13 @@
-import { Action, ActionPanel, Detail, Icon, LaunchType, launchCommand } from "@raycast/api";
+import { Action, ActionPanel, Detail, Icon, LaunchType, launchCommand, useNavigation } from "@raycast/api";
 import { useCallback, useMemo } from "react";
-import { AppendFeatureForm } from "./project-forms";
+import { AppendFeatureForm, EditFeaturesForm, EditProjectForm } from "./project-forms";
 import { AppendFeatureValues } from "./project-form-types";
 import { useIdeasManager } from "./use-ideas-manager";
+import { formatIdeaMarkdown } from "./ideas";
 
 export default function AppendFeatureCommand() {
   const { isLoading, projects, appendFeature } = useIdeasManager();
+  const { push } = useNavigation();
   const activeProjects = useMemo(() => projects.filter((project) => !project.isArchived), [projects]);
   const handleAppend = useCallback(
     async (values: AppendFeatureValues): Promise<boolean> => {
@@ -14,15 +16,11 @@ export default function AppendFeatureCommand() {
         return false;
       }
 
-      await launchCommand({
-        name: "list-projects",
-        type: LaunchType.UserInitiated,
-        context: { projectId: result.id },
-      });
+      push(<ProjectDetailView projectId={result.id} />);
 
       return true;
     },
-    [appendFeature],
+    [appendFeature, push],
   );
 
   if (isLoading) {
@@ -64,4 +62,74 @@ export default function AppendFeatureCommand() {
   }
 
   return <AppendFeatureForm projects={activeProjects} onSubmit={handleAppend} />;
+}
+
+function ProjectDetailView({ projectId }: { projectId: string }) {
+  const { projects, updateProject, editFeatures } = useIdeasManager();
+  const project = useMemo(() => projects.find((item) => item.id === projectId), [projects, projectId]);
+
+  if (!project) {
+    return (
+      <Detail
+        navigationTitle="Project Unavailable"
+        markdown="The project could not be found. It may have been removed."
+        actions={
+          <ActionPanel>
+            <Action
+              title="Open List Projects"
+              icon={Icon.AppWindowList}
+              onAction={() => launchCommand({ name: "list-projects", type: LaunchType.UserInitiated })}
+            />
+          </ActionPanel>
+        }
+      />
+    );
+  }
+
+  return (
+    <Detail
+      navigationTitle={project.title}
+      markdown={formatIdeaMarkdown(project)}
+      actions={
+        <ActionPanel>
+          <Action.Push
+            title="Edit Project"
+            icon={Icon.Pencil}
+            shortcut={{ modifiers: ["cmd"], key: "e" }}
+            target={
+              <EditProjectForm
+                project={project}
+                onSubmit={async (values) => {
+                  const updated = await updateProject(project.id, values);
+                  return updated !== null;
+                }}
+              />
+            }
+          />
+          <Action.Push
+            title="Edit Features"
+            icon={Icon.TextDocument}
+            shortcut={{ modifiers: ["cmd", "shift"], key: "e" }}
+            target={
+              <EditFeaturesForm
+                project={project}
+                onSubmit={async (featureBodies) => {
+                  const updated = await editFeatures(project.id, featureBodies);
+                  return updated !== null;
+                }}
+              />
+            }
+          />
+          <Action
+            title="Open List Projects"
+            icon={Icon.AppWindowList}
+            shortcut={{ modifiers: ["cmd"], key: "l" }}
+            onAction={() =>
+              launchCommand({ name: "list-projects", type: LaunchType.UserInitiated, context: { projectId } })
+            }
+          />
+        </ActionPanel>
+      }
+    />
+  );
 }

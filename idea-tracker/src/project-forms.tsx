@@ -1,6 +1,6 @@
 import { Action, ActionPanel, Form, Icon, Toast, showToast, useNavigation } from "@raycast/api";
 import { useForm } from "@raycast/utils";
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Idea, normalizeIdea } from "./ideas";
 import { AppendFeatureValues, ProjectFormValues } from "./project-form-types";
 
@@ -145,6 +145,87 @@ export function EditProjectForm({
       includeInitialFeatures={false}
       onSubmit={onSubmit}
     />
+  );
+}
+
+export function EditFeaturesForm({
+  project,
+  onSubmit,
+}: {
+  project: Idea;
+  onSubmit: (featureBodies: string[]) => Promise<boolean>;
+}) {
+  const { pop } = useNavigation();
+  const initialFeatureBodies = useMemo(
+    () => (project.features.length > 0 ? project.features.map((feature) => feature.content) : [""]),
+    [project.features],
+  );
+  const [featureInputs, setFeatureInputs] = useState<string[]>(initialFeatureBodies);
+
+  useEffect(() => {
+    setFeatureInputs(initialFeatureBodies);
+  }, [initialFeatureBodies]);
+
+  function handleFeatureChange(index: number, value: string) {
+    setFeatureInputs((prev) => {
+      const next = [...prev];
+      next[index] = value;
+      return next;
+    });
+  }
+
+  function handleAddField() {
+    setFeatureInputs((prev) => [...prev, ""]);
+  }
+
+  function handleResetFields() {
+    setFeatureInputs(initialFeatureBodies);
+  }
+
+  async function handleSubmit() {
+    const success = await onSubmit(featureInputs);
+    if (success) {
+      pop();
+    }
+  }
+
+  return (
+    <Form
+      navigationTitle={`Edit Features • ${project.title}`}
+      actions={
+        <ActionPanel>
+          <ActionPanel.Section>
+            <Action.SubmitForm title="Save Features" onSubmit={handleSubmit} />
+            <Action
+              title="Add Feature Field"
+              icon={Icon.PlusCircle}
+              shortcut={{ modifiers: ["cmd", "shift"], key: "n" }}
+              onAction={handleAddField}
+            />
+            <Action
+              title="Reset Changes"
+              icon={Icon.ArrowCounterClockwise}
+              shortcut={{ modifiers: ["cmd", "shift"], key: "r" }}
+              onAction={handleResetFields}
+            />
+          </ActionPanel.Section>
+        </ActionPanel>
+      }
+    >
+      <Form.Description text="Update each feature individually. Leave a field blank to remove it when saving." />
+      {featureInputs.map((value, index) => (
+        <Form.TextArea
+          key={`feature-${index}`}
+          id={`feature-${index}`}
+          title={`Feature ${index + 1}`}
+          placeholder="Describe the feature."
+          value={value}
+          autoFocus={index === 0}
+          info="Leave empty to remove this feature."
+          onChange={(text) => handleFeatureChange(index, text)}
+        />
+      ))}
+    </Form>
   );
 }
 

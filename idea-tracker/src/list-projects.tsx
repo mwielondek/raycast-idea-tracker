@@ -15,7 +15,7 @@ import {
 import { useLocalStorage } from "@raycast/utils";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Idea, formatAbsoluteDate, formatIdeaMarkdown, formatIdeasMarkdown } from "./ideas";
-import { AddProjectForm, AppendFeatureForm, EditProjectForm } from "./project-forms";
+import { AddProjectForm, AppendFeatureForm, EditProjectForm, EditFeaturesForm } from "./project-forms";
 import { ProjectFormValues } from "./project-form-types";
 import { useIdeasManager } from "./use-ideas-manager";
 
@@ -562,87 +562,6 @@ function ImportProjectsForm({ onImport }: { onImport: (filePath: string) => Prom
     >
       <Form.FilePicker id="file" title="Markdown File" allowMultipleSelection={false} />
       <Form.Description text="Projects can be separated by blank lines. Start each project with a heading (or plain line) followed by features written as bullets using '-' or '*' characters." />
-    </Form>
-  );
-}
-
-function EditFeaturesForm({
-  project,
-  onSubmit,
-}: {
-  project: Idea;
-  onSubmit: (featureBodies: string[]) => Promise<boolean>;
-}) {
-  const { pop } = useNavigation();
-  const initialFeatureBodies = useMemo(
-    () => (project.features.length > 0 ? project.features.map((feature) => feature.content) : [""]),
-    [project.features],
-  );
-  const [featureInputs, setFeatureInputs] = useState<string[]>(initialFeatureBodies);
-
-  useEffect(() => {
-    setFeatureInputs(initialFeatureBodies);
-  }, [initialFeatureBodies]);
-
-  function handleFeatureChange(index: number, value: string) {
-    setFeatureInputs((prev) => {
-      const next = [...prev];
-      next[index] = value;
-      return next;
-    });
-  }
-
-  function handleAddField() {
-    setFeatureInputs((prev) => [...prev, ""]);
-  }
-
-  function handleResetFields() {
-    setFeatureInputs(initialFeatureBodies);
-  }
-
-  async function handleSubmit() {
-    const success = await onSubmit(featureInputs);
-    if (success) {
-      pop();
-    }
-  }
-
-  return (
-    <Form
-      navigationTitle={`Edit Features • ${project.title}`}
-      actions={
-        <ActionPanel>
-          <ActionPanel.Section>
-            <Action.SubmitForm title="Save Features" onSubmit={handleSubmit} />
-            <Action
-              title="Add Feature Field"
-              icon={Icon.PlusCircle}
-              shortcut={{ modifiers: ["cmd", "shift"], key: "n" }}
-              onAction={handleAddField}
-            />
-            <Action
-              title="Reset Changes"
-              icon={Icon.ArrowCounterClockwise}
-              shortcut={{ modifiers: ["cmd", "shift"], key: "r" }}
-              onAction={handleResetFields}
-            />
-          </ActionPanel.Section>
-        </ActionPanel>
-      }
-    >
-      <Form.Description text="Update each feature individually. Leave a field blank to remove it when saving." />
-      {featureInputs.map((value, index) => (
-        <Form.TextArea
-          key={`feature-${index}`}
-          id={`feature-${index}`}
-          title={`Feature ${index + 1}`}
-          placeholder="Describe the feature."
-          value={value}
-          autoFocus={index === 0}
-          info="Leave empty to remove this feature."
-          onChange={(text) => handleFeatureChange(index, text)}
-        />
-      ))}
     </Form>
   );
 }
