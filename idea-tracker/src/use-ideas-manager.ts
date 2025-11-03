@@ -1,4 +1,5 @@
 import { Alert, Toast, confirmAlert, showToast } from "@raycast/api";
+import { readFile } from "node:fs/promises";
 import { useCallback, useMemo } from "react";
 import { useLocalStorage } from "@raycast/utils";
 import {
@@ -8,6 +9,7 @@ import {
   createIdea,
   mergeFeatureBodies,
   normalizeIdea,
+  parseIdeasFromMarkdown,
   parseTagsInput,
 } from "./ideas";
 import { ProjectFormValues } from "./project-form-types";
@@ -230,6 +232,43 @@ export function useIdeasManager() {
     [setProjects, storedProjects],
   );
 
+  const importProjectsFromMarkdown = useCallback(
+    async (filePath: string): Promise<number> => {
+      try {
+        const markdown = await readFile(filePath, "utf8");
+        const parsed = parseIdeasFromMarkdown(markdown);
+        if (parsed.length === 0) {
+          await showToast(Toast.Style.Failure, "No projects found in file");
+          return 0;
+        }
+        const now = new Date().toISOString();
+        const importedProjects = parsed.map((project) => {
+          const features =
+            project.features.length > 0 ? createFeaturesFromText(project.features.join("\n"), { timestamp: now }) : [];
+          return createIdea({
+            title: project.title,
+            features,
+            createdAt: now,
+            updatedAt: now,
+          });
+        });
+
+        await setProjects([...importedProjects, ...(storedProjects ?? [])]);
+        const count = importedProjects.length;
+        await showToast(
+          Toast.Style.Success,
+          `Imported ${count} project${count === 1 ? "" : "s"}`,
+          count === 1 ? importedProjects[0]?.title : undefined,
+        );
+        return count;
+      } catch (error) {
+        await showToast(Toast.Style.Failure, "Failed to import projects", String(error));
+        return 0;
+      }
+    },
+    [setProjects, storedProjects],
+  );
+
   return {
     isLoading,
     projects,
@@ -241,5 +280,6 @@ export function useIdeasManager() {
     togglePin,
     toggleArchive,
     deleteProject,
+    importProjectsFromMarkdown,
   };
 }

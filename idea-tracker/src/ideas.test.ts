@@ -6,6 +6,7 @@ import {
   formatIdeaMarkdown,
   formatIdeasMarkdown,
   mergeFeatureBodies,
+  parseIdeasFromMarkdown,
   parseTagsInput,
 } from "./ideas";
 
@@ -233,5 +234,56 @@ describe("parseTagsInput", () => {
 
   it("splits and trims comma separated tags", () => {
     expect(parseTagsInput("growth,  mobile ,  B2B")).toEqual(["growth", "mobile", "B2B"]);
+  });
+});
+
+describe("parseIdeasFromMarkdown", () => {
+  it("parses headings and bullet lists into projects", () => {
+    const markdown = [
+      "# Launch Companion App",
+      "- Realtime sync",
+      "- Push notifications",
+      "",
+      "Growth Experiments",
+      "* Referral program",
+      "* Upgrade nudges",
+      "",
+      "Empty Project",
+      "",
+      "# Incomplete",
+    ].join("\n");
+
+    const result = parseIdeasFromMarkdown(markdown);
+
+    expect(result).toEqual([
+      {
+        title: "Launch Companion App",
+        features: ["Realtime sync", "Push notifications"],
+      },
+      {
+        title: "Growth Experiments",
+        features: ["Referral program", "Upgrade nudges"],
+      },
+      {
+        title: "Empty Project",
+        features: [],
+      },
+      {
+        title: "Incomplete",
+        features: [],
+      },
+    ]);
+  });
+
+  it("assigns untitled placeholder when bullets appear before a title", () => {
+    const markdown = "- First idea\n- Second idea";
+    const result = parseIdeasFromMarkdown(markdown);
+
+    expect(result).toEqual([
+      {
+        title: "Untitled Project",
+        features: ["First idea", "Second idea"],
+      },
+    ]);
   });
 });

@@ -1,4 +1,16 @@
-import { Action, ActionPanel, Clipboard, Color, Form, Icon, List, showHUD, useNavigation } from "@raycast/api";
+import {
+  Action,
+  ActionPanel,
+  Clipboard,
+  Color,
+  Form,
+  Icon,
+  List,
+  Toast,
+  showHUD,
+  showToast,
+  useNavigation,
+} from "@raycast/api";
 import { useLocalStorage } from "@raycast/utils";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Idea, formatAbsoluteDate, formatIdeaMarkdown, formatIdeasMarkdown } from "./ideas";
@@ -19,6 +31,7 @@ export default function ListProjectsCommand() {
     togglePin,
     toggleArchive,
     deleteProject,
+    importProjectsFromMarkdown,
   } = useIdeasManager();
 
   const { value: tagFilter, setValue: setTagFilter } = useLocalStorage<string>(
@@ -147,6 +160,11 @@ export default function ListProjectsCommand() {
                 icon={Icon.Plus}
                 target={<AddProjectForm onSubmit={handleCreateProject} />}
               />
+              <Action.Push
+                title="Import Projects from Markdown"
+                icon={Icon.Upload}
+                target={<ImportProjectsForm onImport={importProjectsFromMarkdown} />}
+              />
             </ActionPanel>
           }
         />
@@ -170,6 +188,7 @@ export default function ListProjectsCommand() {
                   onUpdateProject={handleUpdateProject}
                   onTogglePin={handleTogglePin}
                   onToggleArchive={handleToggleArchive}
+                  onImportProjects={importProjectsFromMarkdown}
                 />
               ))}
             </List.Section>
@@ -186,6 +205,11 @@ export default function ListProjectsCommand() {
                       title="Add Project"
                       icon={Icon.Plus}
                       target={<AddProjectForm onSubmit={handleCreateProject} />}
+                    />
+                    <Action.Push
+                      title="Import Projects from Markdown"
+                      icon={Icon.Upload}
+                      target={<ImportProjectsForm onImport={importProjectsFromMarkdown} />}
                     />
                   </ActionPanel>
                 }
@@ -207,6 +231,7 @@ export default function ListProjectsCommand() {
                   onUpdateProject={handleUpdateProject}
                   onTogglePin={handleTogglePin}
                   onToggleArchive={handleToggleArchive}
+                  onImportProjects={importProjectsFromMarkdown}
                 />
               ))
             )}
@@ -230,6 +255,7 @@ export default function ListProjectsCommand() {
                   onUpdateProject={handleUpdateProject}
                   onTogglePin={handleTogglePin}
                   onToggleArchive={handleToggleArchive}
+                  onImportProjects={importProjectsFromMarkdown}
                 />
               ))}
             </List.Section>
@@ -260,6 +286,7 @@ type ProjectListItemProps = {
   onUpdateProject: UpdateProjectHandler;
   onTogglePin: (projectId: string, pin: boolean) => Promise<void>;
   onToggleArchive: (projectId: string, archive: boolean) => Promise<void>;
+  onImportProjects: (filePath: string) => Promise<number>;
 };
 
 function ProjectListItem({
@@ -276,6 +303,7 @@ function ProjectListItem({
   onUpdateProject,
   onTogglePin,
   onToggleArchive,
+  onImportProjects,
 }: ProjectListItemProps) {
   const accessories: List.Item.Accessory[] = project.tags.map((tag) => ({
     tag: { value: tag, color: tagColor(tag) },
@@ -311,6 +339,7 @@ function ProjectListItem({
           onUpdateProject={onUpdateProject}
           onTogglePin={onTogglePin}
           onToggleArchive={onToggleArchive}
+          onImportProjects={onImportProjects}
         />
       }
     />
@@ -334,6 +363,7 @@ type ProjectActionsProps = {
   onUpdateProject: UpdateProjectHandler;
   onTogglePin: (projectId: string, pin: boolean) => Promise<void>;
   onToggleArchive: (projectId: string, archive: boolean) => Promise<void>;
+  onImportProjects: (filePath: string) => Promise<number>;
 };
 
 function ProjectActions({
@@ -349,6 +379,7 @@ function ProjectActions({
   onUpdateProject,
   onTogglePin,
   onToggleArchive,
+  onImportProjects,
 }: ProjectActionsProps) {
   return (
     <ActionPanel>
@@ -463,6 +494,12 @@ function ProjectActions({
           shortcut={{ modifiers: ["ctrl"], key: "x" }}
           onAction={async () => onDelete(project.id)}
         />
+        <Action.Push
+          title="Import Projects from Markdown"
+          icon={Icon.Upload}
+          shortcut={{ modifiers: ["cmd", "shift"], key: "i" }}
+          target={<ImportProjectsForm onImport={onImportProjects} />}
+        />
       </ActionPanel.Section>
     </ActionPanel>
   );
@@ -489,6 +526,37 @@ function InlineAppendFeatureForm(props: {
         return false;
       }}
     />
+  );
+}
+
+function ImportProjectsForm({ onImport }: { onImport: (filePath: string) => Promise<number> }) {
+  const { pop } = useNavigation();
+
+  return (
+    <Form
+      navigationTitle="Import Projects"
+      actions={
+        <ActionPanel>
+          <Action.SubmitForm
+            title="Import"
+            onSubmit={async (values: { file?: string[] }) => {
+              const filePath = values.file?.[0];
+              if (!filePath) {
+                await showToast(Toast.Style.Failure, "Choose a Markdown file");
+                return;
+              }
+              const imported = await onImport(filePath);
+              if (imported > 0) {
+                pop();
+              }
+            }}
+          />
+        </ActionPanel>
+      }
+    >
+      <Form.FilePicker id="file" title="Markdown File" allowMultipleSelection={false} />
+      <Form.Description text="Projects can be separated by blank lines. Start each project with a heading (or plain line) followed by features written as bullets using '-' or '*' characters." />
+    </Form>
   );
 }
 

@@ -171,3 +171,58 @@ export function normalizeIdea(idea: StoredIdea): Idea {
     isArchived: idea.isArchived ?? false,
   };
 }
+
+export type MarkdownImportProject = {
+  title: string;
+  features: string[];
+};
+
+export function parseIdeasFromMarkdown(markdown: string): MarkdownImportProject[] {
+  const projects: MarkdownImportProject[] = [];
+  const lines = markdown.split(/\r?\n/);
+
+  let currentTitle: string | null = null;
+  let currentFeatures: string[] = [];
+
+  const pushCurrent = () => {
+    if (currentTitle) {
+      projects.push({
+        title: currentTitle,
+        features: currentFeatures.map((feature) => feature.trim()).filter(Boolean),
+      });
+    }
+    currentTitle = null;
+    currentFeatures = [];
+  };
+
+  for (const rawLine of lines) {
+    const line = rawLine.trim();
+    if (!line) {
+      pushCurrent();
+      continue;
+    }
+
+    const bulletMatch = line.match(/^[-*]\s*(.+)$/);
+    if (bulletMatch) {
+      const content = bulletMatch[1].trim();
+      if (!currentTitle) {
+        currentTitle = "Untitled Project";
+      }
+      currentFeatures.push(content);
+      continue;
+    }
+
+    const headingMatch = line.match(/^#+\s*(.+)$/);
+    const potentialTitle = headingMatch ? headingMatch[1].trim() : line;
+
+    if (currentTitle || currentFeatures.length > 0) {
+      pushCurrent();
+    }
+
+    currentTitle = potentialTitle || "Untitled Project";
+  }
+
+  pushCurrent();
+
+  return projects.filter((project) => project.title.length > 0 && (project.features.length > 0 || project.title));
+}

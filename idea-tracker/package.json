@@ -5,7 +5,7 @@
   "description": "Capture project ideas, append feature bullets in seconds, and export the latest thinking as Markdown without leaving Raycast.",
   "icon": "extension-icon.png",
   "author": "mwielondek",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "platforms": [
     "macOS",
     "Windows"
