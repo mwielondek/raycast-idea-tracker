@@ -5,6 +5,7 @@ import {
   Color,
   Form,
   Icon,
+  LaunchProps,
   List,
   Toast,
   showHUD,
@@ -20,7 +21,7 @@ import { useIdeasManager } from "./use-ideas-manager";
 
 const TAG_COLORS = ["#A5B4FC", "#C4B5FD", "#FDBA8C", "#FBCFE8", "#BFDBFE", "#FDE68A", "#F5D0FE", "#C7D2FE"] as const;
 
-export default function ListProjectsCommand() {
+export default function ListProjectsCommand({ launchContext }: LaunchProps<{ projectId?: string }>) {
   const {
     isLoading,
     projects,
@@ -58,8 +59,9 @@ export default function ListProjectsCommand() {
     };
   }, [projects, selectedTag]);
 
-  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
-  const [isDetailVisible, setDetailVisible] = useState(false);
+  const initialProjectId = launchContext?.projectId ?? null;
+  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(initialProjectId);
+  const [isDetailVisible, setDetailVisible] = useState(Boolean(initialProjectId));
 
   const handleShowProjectDetail = useCallback((projectId: string) => {
     setSelectedProjectId(projectId);
@@ -75,12 +77,16 @@ export default function ListProjectsCommand() {
       return;
     }
 
+    if (isLoading) {
+      return;
+    }
+
     const projectStillExists = projects.some((project) => project.id === selectedProjectId);
     if (!projectStillExists) {
       setSelectedProjectId(null);
       setDetailVisible(false);
     }
-  }, [projects, selectedProjectId]);
+  }, [projects, selectedProjectId, isLoading]);
 
   const handleCreateProject = useCallback(
     async (values: ProjectFormValues) => {

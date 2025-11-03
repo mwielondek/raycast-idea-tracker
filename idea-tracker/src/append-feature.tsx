@@ -10,7 +10,17 @@ export default function AppendFeatureCommand() {
   const handleAppend = useCallback(
     async (values: AppendFeatureValues): Promise<boolean> => {
       const result = await appendFeature(values.projectId, values.feature);
-      return result !== null;
+      if (!result) {
+        return false;
+      }
+
+      await launchCommand({
+        name: "list-projects",
+        type: LaunchType.UserInitiated,
+        context: { projectId: result.id },
+      });
+
+      return true;
     },
     [appendFeature],
   );
