@@ -154,3 +154,20 @@ export function formatIdeasMarkdown(ideas: Idea[], options: FormatOptions = {}):
   }
   return ideas.map((idea) => formatIdeaMarkdown(idea, options)).join("\n\n---\n\n");
 }
+
+export type StoredIdea = Omit<Idea, "tags" | "features" | "isPinned" | "isArchived"> & {
+  tags?: string[];
+  features?: Idea["features"];
+  isPinned?: boolean;
+  isArchived?: boolean;
+};
+
+export function normalizeIdea(idea: StoredIdea): Idea {
+  return {
+    ...idea,
+    tags: idea.tags ?? [],
+    features: idea.features ?? [],
+    isPinned: idea.isPinned ?? false,
+    isArchived: idea.isArchived ?? false,
+  };
+}

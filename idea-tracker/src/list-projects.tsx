@@ -1,62 +1,25 @@
-import {
-  Action,
-  ActionPanel,
-  Alert,
-  Clipboard,
-  Color,
-  Form,
-  Icon,
-  List,
-  Toast,
-  confirmAlert,
-  showHUD,
-  showToast,
-  useNavigation,
-} from "@raycast/api";
-import { useForm, useLocalStorage } from "@raycast/utils";
+import { Action, ActionPanel, Clipboard, Color, Form, Icon, List, showHUD, useNavigation } from "@raycast/api";
+import { useLocalStorage } from "@raycast/utils";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import {
-  IDEAS_STORAGE_KEY,
-  Idea,
-  createFeaturesFromText,
-  createIdea,
-  formatAbsoluteDate,
-  formatIdeaMarkdown,
-  formatIdeasMarkdown,
-  parseTagsInput,
-  mergeFeatureBodies,
-} from "./ideas";
+import { Idea, formatAbsoluteDate, formatIdeaMarkdown, formatIdeasMarkdown } from "./ideas";
+import { AddProjectForm, AppendFeatureForm, EditProjectForm } from "./project-forms";
+import { ProjectFormValues } from "./project-form-types";
+import { useIdeasManager } from "./use-ideas-manager";
 
 const TAG_COLORS = ["#A5B4FC", "#C4B5FD", "#FDBA8C", "#FBCFE8", "#BFDBFE", "#FDE68A", "#F5D0FE", "#C7D2FE"] as const;
-const LAST_PROJECT_STORAGE_KEY = "raycast-idea-tracker/append-feature-last-project";
-
-export type ProjectFormValues = {
-  title: string;
-  summary?: string;
-  tags?: string;
-  initialFeatures?: string;
-};
-
-export type AppendFeatureValues = {
-  projectId: string;
-  feature: string;
-};
-
-type StoredProject = Omit<Idea, "tags" | "features" | "isPinned" | "isArchived"> & {
-  tags?: string[];
-  features?: Idea["features"];
-  isPinned?: boolean;
-  isArchived?: boolean;
-};
 
 export default function ListProjectsCommand() {
-  const { value: storedProjects, setValue: setProjects, isLoading } = useLocalStorage<Idea[]>(IDEAS_STORAGE_KEY, []);
-
-  const projects = useMemo(() => {
-    return [...(storedProjects ?? []).map(normalizeProject)].sort(
-      (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
-    );
-  }, [storedProjects]);
+  const {
+    isLoading,
+    projects,
+    createProject,
+    updateProject,
+    appendFeature,
+    editFeatures,
+    togglePin,
+    toggleArchive,
+    deleteProject,
+  } = useIdeasManager();
 
   const { value: tagFilter, setValue: setTagFilter } = useLocalStorage<string>(
     "raycast-idea-tracker/tag-filter",
@@ -106,193 +69,40 @@ export default function ListProjectsCommand() {
     }
   }, [projects, selectedProjectId]);
 
-  async function handleCreateProject(values: ProjectFormValues): Promise<boolean> {
-    const title = values.title?.trim();
-    if (!title) {
-      await showToast(Toast.Style.Failure, "Project name is required");
-      return false;
-    }
+  const handleCreateProject = useCallback(
+    async (values: ProjectFormValues) => {
+      const result = await createProject(values);
+      return result !== null;
+    },
+    [createProject],
+  );
 
-    const now = new Date().toISOString();
-    const tags = parseTagsInput(values.tags);
-    const features = createFeaturesFromText(values.initialFeatures);
-    const nextProject = createIdea({
-      title,
-      summary: values.summary,
-      tags,
-      features,
-      createdAt: now,
-      updatedAt: now,
-    });
+  const handleUpdateProject = useCallback(
+    async (projectId: string, values: ProjectFormValues) => updateProject(projectId, values),
+    [updateProject],
+  );
 
-    try {
-      await setProjects([nextProject, ...(storedProjects ?? [])]);
-      await showToast(Toast.Style.Success, "Project added", title);
-      return true;
-    } catch (error) {
-      await showToast(Toast.Style.Failure, "Failed to add project", String(error));
-      return false;
-    }
-  }
+  const handleAppendFeature = useCallback(
+    async (projectId: string, featureText: string) => appendFeature(projectId, featureText),
+    [appendFeature],
+  );
 
-  async function handleUpdateProject(projectId: string, values: ProjectFormValues): Promise<Idea | null> {
-    const title = values.title?.trim();
-    if (!title) {
-      await showToast(Toast.Style.Failure, "Project name is required");
-      return null;
-    }
+  const handleEditFeatures = useCallback(
+    async (projectId: string, featureBodies: string[]) => editFeatures(projectId, featureBodies),
+    [editFeatures],
+  );
 
-    const tags = parseTagsInput(values.tags);
-    const now = new Date().toISOString();
+  const handleTogglePin = useCallback(
+    async (projectId: string, pin: boolean) => togglePin(projectId, pin),
+    [togglePin],
+  );
 
-    const updated = (storedProjects ?? []).map((project) => {
-      if (project.id !== projectId) {
-        return project;
-      }
-      return {
-        ...project,
-        title,
-        summary: values.summary?.trim() || undefined,
-        tags,
-        updatedAt: now,
-      };
-    });
+  const handleToggleArchive = useCallback(
+    async (projectId: string, archive: boolean) => toggleArchive(projectId, archive),
+    [toggleArchive],
+  );
 
-    await setProjects(updated);
-    await showToast(Toast.Style.Success, "Project updated");
-    const updatedProject = updated.find((project) => project.id === projectId);
-    return updatedProject ? normalizeProject(updatedProject) : null;
-  }
-
-  async function handleAppendFeature(projectId: string, featureText: string): Promise<Idea | null> {
-    const trimmed = featureText.trim();
-    if (!trimmed) {
-      await showToast(Toast.Style.Failure, "Feature text cannot be empty");
-      return null;
-    }
-
-    const existing = storedProjects ?? [];
-    const project = existing.find((item) => item.id === projectId);
-    if (!project) {
-      await showToast(Toast.Style.Failure, "Project not found");
-      return null;
-    }
-
-    if (project.isArchived) {
-      await showToast(Toast.Style.Failure, "Project is archived");
-      return null;
-    }
-
-    const now = new Date().toISOString();
-    const newFeatures = createFeaturesFromText(trimmed, { timestamp: now });
-    if (newFeatures.length === 0) {
-      return null;
-    }
-
-    const updatedProjects = existing.map((item) => {
-      if (item.id !== projectId) {
-        return item;
-      }
-
-      return {
-        ...item,
-        features: [...item.features, ...newFeatures],
-        updatedAt: now,
-      };
-    });
-
-    await setProjects(updatedProjects);
-    await showToast(Toast.Style.Success, "Feature appended");
-    const updatedProject = updatedProjects.find((item) => item.id === projectId);
-    return updatedProject ? normalizeProject(updatedProject) : null;
-  }
-
-  async function handleEditFeatures(projectId: string, featureBodies: string[]): Promise<Idea | null> {
-    const existing = storedProjects ?? [];
-    const project = existing.find((item) => item.id === projectId);
-    if (!project) {
-      await showToast(Toast.Style.Failure, "Project not found");
-      return null;
-    }
-
-    if (project.isArchived) {
-      await showToast(Toast.Style.Failure, "Project is archived");
-      return null;
-    }
-
-    const now = new Date().toISOString();
-    const updatedFeatures = mergeFeatureBodies(project.features, featureBodies, { timestamp: now });
-    const hasChanges =
-      updatedFeatures.length !== project.features.length ||
-      updatedFeatures.some((feature, index) => project.features[index]?.content !== feature.content);
-    const updatedProjects = existing.map((item) => {
-      if (item.id !== projectId) {
-        return item;
-      }
-      return {
-        ...item,
-        features: updatedFeatures,
-        updatedAt: hasChanges ? now : item.updatedAt,
-      };
-    });
-
-    await setProjects(updatedProjects);
-    await showToast(Toast.Style.Success, "Features updated");
-    const updatedProject = updatedProjects.find((item) => item.id === projectId);
-    return updatedProject ? normalizeProject(updatedProject) : null;
-  }
-
-  async function handleTogglePin(projectId: string, pin: boolean) {
-    const now = new Date().toISOString();
-    const updated = (storedProjects ?? []).map((item) => {
-      if (item.id !== projectId) {
-        return item;
-      }
-      return {
-        ...item,
-        isPinned: pin,
-        isArchived: pin ? false : (item.isArchived ?? false),
-        updatedAt: now,
-      };
-    });
-
-    await setProjects(updated);
-    await showToast(Toast.Style.Success, pin ? "Project pinned" : "Project unpinned");
-  }
-
-  async function handleToggleArchive(projectId: string, archive: boolean) {
-    const now = new Date().toISOString();
-    const updated = (storedProjects ?? []).map((item) => {
-      if (item.id !== projectId) {
-        return item;
-      }
-      return {
-        ...item,
-        isArchived: archive,
-        isPinned: archive ? false : (item.isPinned ?? false),
-        updatedAt: now,
-      };
-    });
-
-    await setProjects(updated);
-    await showToast(Toast.Style.Success, archive ? "Project archived" : "Project restored");
-  }
-
-  async function handleDeleteProject(projectId: string) {
-    const confirmed = await confirmAlert({
-      title: "Delete project?",
-      message: "This will permanently remove the project and all captured features.",
-      primaryAction: { title: "Delete", style: Alert.ActionStyle.Destructive },
-    });
-
-    if (!confirmed) {
-      return;
-    }
-
-    const next = (storedProjects ?? []).filter((item) => item.id !== projectId);
-    await setProjects(next);
-    await showToast(Toast.Style.Success, "Project deleted");
-  }
+  const handleDeleteProject = useCallback(async (projectId: string) => deleteProject(projectId), [deleteProject]);
 
   return (
     <List
@@ -761,267 +571,6 @@ function EditFeaturesForm({
       ))}
     </Form>
   );
-}
-
-type AppendFeatureFormProps = {
-  navigationTitle?: string;
-  projectId?: string;
-  projects?: Idea[];
-  onSubmit: (values: AppendFeatureValues) => Promise<boolean>;
-  closeOnSuccess?: boolean;
-  rememberLastProject?: boolean;
-};
-
-export function AppendFeatureForm({
-  navigationTitle = "Append Feature",
-  projectId,
-  projects,
-  onSubmit,
-  closeOnSuccess = false,
-  rememberLastProject = false,
-}: AppendFeatureFormProps) {
-  const { pop } = useNavigation();
-  const pickableProjects = useMemo(() => (projects ?? []).map(normalizeProject), [projects]);
-  const { value: storedProjectPreference, setValue: setStoredProjectPreference } = useLocalStorage<string | undefined>(
-    LAST_PROJECT_STORAGE_KEY,
-    undefined,
-  );
-  const initialProjectSelection = useMemo(() => {
-    if (projectId) {
-      return projectId;
-    }
-    if (rememberLastProject && storedProjectPreference) {
-      const exists = pickableProjects.some((item) => item.id === storedProjectPreference);
-      if (exists) {
-        return storedProjectPreference;
-      }
-    }
-    return "";
-  }, [projectId, rememberLastProject, storedProjectPreference, pickableProjects]);
-
-  const {
-    handleSubmit: handleFormSubmit,
-    itemProps,
-    setValue,
-    values,
-    focus,
-  } = useForm<AppendFeatureValues>({
-    initialValues: {
-      projectId: initialProjectSelection,
-      feature: "",
-    },
-    onSubmit: async (formValues) => {
-      const effectiveProjectId = projectId ?? formValues.projectId;
-      if (!effectiveProjectId) {
-        await showToast(Toast.Style.Failure, "Select a project");
-        focus("projectId");
-        return;
-      }
-
-      const trimmedFeature = formValues.feature.trim();
-      if (!trimmedFeature) {
-        await showToast(Toast.Style.Failure, "Describe the feature");
-        focus("feature");
-        return;
-      }
-
-      const success = await onSubmit({ projectId: effectiveProjectId, feature: trimmedFeature });
-      if (!success) {
-        return;
-      }
-
-      setValue("feature", "");
-      if (!projectId) {
-        if (rememberLastProject) {
-          void setStoredProjectPreference(effectiveProjectId);
-        } else {
-          setValue("projectId", "");
-        }
-      }
-      setTimeout(() => focus("feature"), 0);
-      if (closeOnSuccess) {
-        pop();
-      }
-    },
-  });
-
-  useEffect(() => {
-    if (projectId) {
-      setValue("projectId", projectId);
-      setTimeout(() => focus("feature"), 0);
-    }
-  }, [projectId, setValue, focus]);
-
-  useEffect(() => {
-    if (!projectId && rememberLastProject && storedProjectPreference) {
-      const exists = pickableProjects.some((project) => project.id === storedProjectPreference);
-      if (exists && values.projectId !== storedProjectPreference) {
-        setValue("projectId", storedProjectPreference);
-      } else if (!exists) {
-        void setStoredProjectPreference(undefined);
-      }
-    }
-  }, [
-    projectId,
-    rememberLastProject,
-    storedProjectPreference,
-    pickableProjects,
-    setValue,
-    values.projectId,
-    setStoredProjectPreference,
-  ]);
-
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      if (projectId) {
-        focus("feature");
-      } else {
-        focus("projectId");
-      }
-    }, 0);
-    return () => clearTimeout(timer);
-  }, [projectId, focus]);
-
-  return (
-    <Form
-      navigationTitle={navigationTitle}
-      actions={
-        <ActionPanel>
-          <Action.SubmitForm title="Add Feature" onSubmit={handleFormSubmit} />
-        </ActionPanel>
-      }
-    >
-      {!projectId && pickableProjects.length > 0 && (
-        <Form.Dropdown
-          {...itemProps.projectId}
-          title="Project"
-          autoFocus
-          storeValue={rememberLastProject}
-          onChange={(value) => {
-            itemProps.projectId?.onChange?.(value);
-            if (rememberLastProject) {
-              void setStoredProjectPreference(value);
-            }
-          }}
-        >
-          {pickableProjects.map((project) => (
-            <Form.Dropdown.Item
-              key={project.id}
-              value={project.id}
-              title={project.title}
-              icon={project.isPinned ? Icon.Star : project.isArchived ? Icon.Folder : Icon.Circle}
-            />
-          ))}
-        </Form.Dropdown>
-      )}
-      <Form.TextArea
-        {...itemProps.feature}
-        title="Feature Idea"
-        placeholder="Describe the feature. Each new line becomes its own bullet."
-      />
-    </Form>
-  );
-}
-
-export function AddProjectForm({ onSubmit }: { onSubmit: (values: ProjectFormValues) => Promise<boolean> }) {
-  return (
-    <ProjectForm
-      navigationTitle="Add Project"
-      submitLabel="Create Project"
-      initialValues={{ title: "", summary: "", tags: "", initialFeatures: "" }}
-      onSubmit={onSubmit}
-    />
-  );
-}
-
-function EditProjectForm({
-  project,
-  onSubmit,
-}: {
-  project: Idea;
-  onSubmit: (values: ProjectFormValues) => Promise<boolean>;
-}) {
-  return (
-    <ProjectForm
-      navigationTitle={`Edit Project • ${project.title}`}
-      submitLabel="Save Changes"
-      initialValues={{
-        title: project.title,
-        summary: project.summary ?? "",
-        tags: project.tags.join(", "),
-      }}
-      includeInitialFeatures={false}
-      onSubmit={onSubmit}
-    />
-  );
-}
-
-function ProjectForm({
-  navigationTitle,
-  submitLabel,
-  initialValues,
-  onSubmit,
-  includeInitialFeatures = true,
-}: {
-  navigationTitle: string;
-  submitLabel: string;
-  initialValues: Partial<ProjectFormValues>;
-  onSubmit: (values: ProjectFormValues) => Promise<boolean>;
-  includeInitialFeatures?: boolean;
-}) {
-  const { pop } = useNavigation();
-
-  return (
-    <Form
-      navigationTitle={navigationTitle}
-      actions={
-        <ActionPanel>
-          <Action.SubmitForm
-            title={submitLabel}
-            onSubmit={async (values: ProjectFormValues) => {
-              const success = await onSubmit(values);
-              if (success) {
-                pop();
-              }
-            }}
-          />
-        </ActionPanel>
-      }
-    >
-      <Form.TextField id="title" title="Project Name" defaultValue={initialValues.title} autoFocus />
-      <Form.TextArea
-        id="summary"
-        title="Context"
-        placeholder="Problem statement, value proposition, or notes"
-        defaultValue={initialValues.summary}
-      />
-      <Form.TextField
-        id="tags"
-        title="Tags"
-        placeholder="growth, productivity"
-        info="Comma-separated tags"
-        defaultValue={initialValues.tags}
-      />
-      {includeInitialFeatures && (
-        <Form.TextArea
-          id="initialFeatures"
-          title="Initial Features"
-          placeholder="Seed features here. Each new line becomes a separate bullet."
-          defaultValue={initialValues.initialFeatures}
-        />
-      )}
-    </Form>
-  );
-}
-
-function normalizeProject(project: StoredProject): Idea {
-  return {
-    ...project,
-    tags: project.tags ?? [],
-    features: project.features ?? [],
-    isPinned: project.isPinned ?? false,
-    isArchived: project.isArchived ?? false,
-  };
 }
 
 function tagColor(tag: string): Color | string {
